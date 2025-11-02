@@ -5,6 +5,7 @@
 bin/
 obj/
 .vs/
+appsettings.json
 appsettings.Development.json
 appsettings.Local.json
 
