@@ -21,6 +21,8 @@ public partial class User
 
     public string? AddId { get; set; }
 
+    public string Status { get; set; } = null!;
+
     public virtual Account? Acc { get; set; }
 
     public virtual Address? Add { get; set; }

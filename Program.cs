@@ -1,4 +1,4 @@
-
+﻿
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -15,6 +15,14 @@ namespace QLSV_V1
              options.UseSqlServer(builder.Configuration.GetConnectionString("QLSV")));
 
             builder.Services.AddControllers();
+            // Thêm CORS cho phép React truy cập
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowReactApp",
+                    policy => policy.WithOrigins("http://localhost:3000") // React chạy ở đây
+                                    .AllowAnyHeader()
+                                    .AllowAnyMethod());
+            });
             // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
@@ -27,7 +35,7 @@ namespace QLSV_V1
                 app.UseSwagger();
                 app.UseSwaggerUI();
             }
-
+            app.UseCors("AllowReactApp");
             app.UseHttpsRedirection();
 
             app.UseAuthorization();

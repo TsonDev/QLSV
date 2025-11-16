@@ -25,7 +25,8 @@ namespace QLSV_V1.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Subject>>> GetSubjects()
         {
-            return await _context.Subjects.ToListAsync();
+            return await _context.Subjects
+                .Where(s=>s.Status=="Active").ToListAsync();
         }
 
         // GET: api/Subjects/5
@@ -38,65 +39,76 @@ namespace QLSV_V1.Controllers
             {
                 return NotFound();
             }
-
+            if (subject.Status == "Inactive")
+                return BadRequest("Subject is deleted.");
             return subject;
         }
 
         // PUT: api/Subjects/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutSubject(string id, Subject subject)
+        public async Task<IActionResult> PutSubject(string id, SubjectUpdateDto dto)
         {
-            if (id != subject.Id)
-            {
-                return BadRequest();
-            }
+            var subject = await _context.Subjects.FindAsync(id);
+            if (subject == null)
+                return NotFound();
 
-            _context.Entry(subject).State = EntityState.Modified;
+            if (subject.Status == "Inactive")
+                return BadRequest("Subject is deleted.");
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SubjectExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            if (!string.IsNullOrWhiteSpace(dto.Type))
+                subject.Type = dto.Type;
 
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                subject.Name = dto.Name;
+
+            if (dto.SoTc != null)
+                subject.SoTc = dto.SoTc;
+
+            if (dto.CurriculumTerm != null)
+                subject.CurriculumTerm = dto.CurriculumTerm;
+
+            await _context.SaveChangesAsync();
             return NoContent();
         }
+
 
         // POST: api/Subjects
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Subject>> PostSubject(Subject subject)
+        public async Task<ActionResult<Subject>> PostSubject(SubjectCreateDto dto)
         {
-            _context.Subjects.Add(subject);
-            try
+            // Lấy Subject cuối cùng
+            var lastSubject = await _context.Subjects
+                .OrderByDescending(s => s.Id)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastSubject != null && lastSubject.Id.StartsWith("Sub-"))
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SubjectExists(subject.Id))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
+                string numberPart = lastSubject.Id.Substring(4);
+                nextNumber = int.Parse(numberPart) + 1;
             }
 
-            return CreatedAtAction("GetSubject", new { id = subject.Id }, subject);
+            string newSubjectId = $"Sub-{nextNumber:D5}";
+
+            var subject = new Subject
+            {
+                Id = newSubjectId,
+                Type = dto.Type,
+                Name = dto.Name,
+                SoTc = dto.SoTc,
+                CurriculumTerm = dto.CurriculumTerm,
+                Status = "Active"
+            };
+
+            _context.Subjects.Add(subject);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetSubject), new { id = subject.Id }, subject);
         }
+
 
 
 
@@ -110,7 +122,7 @@ namespace QLSV_V1.Controllers
                 return NotFound();
             }
 
-            _context.Subjects.Remove(subject);
+            subject.Status = "Inactive";
             await _context.SaveChangesAsync();
 
             return NoContent();

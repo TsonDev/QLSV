@@ -24,7 +24,7 @@ namespace QLSV_V1.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Teacher>>> GetTeachers()
         {
-            return await _context.Teachers.ToListAsync();
+            return await _context.Teachers.Where(t=>t.Status=="Active").ToListAsync();
         }
 
         // GET: api/Teachers/5
@@ -37,65 +37,74 @@ namespace QLSV_V1.Controllers
             {
                 return NotFound();
             }
-
+            if (teacher.Status == "Inactive")
+                return BadRequest("Teacher is deleted.");
             return teacher;
         }
 
-        // PUT: api/Teachers/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutTeacher(string id, Teacher teacher)
+        public async Task<IActionResult> PutTeacher(string id, TeacherUpdateDto dto)
         {
-            if (id != teacher.TeacherId)
+            var teacher = await _context.Teachers.FindAsync(id);
+            if (teacher == null)
+                return NotFound();
+
+            if (teacher.Status == "Inactive")
+                return BadRequest("Teacher is deleted.");
+
+            // Nếu FE sửa UserId thì kiểm tra tài khoản User có tồn tại hay không
+            if (!string.IsNullOrWhiteSpace(dto.UserId))
             {
-                return BadRequest();
+                bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
+                if (!userExists)
+                    return BadRequest($"UserId {dto.UserId} không tồn tại.");
+
+                teacher.UserId = dto.UserId;
             }
 
-            _context.Entry(teacher).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!TeacherExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 
         // POST: api/Teachers
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Teacher>> PostTeacher(Teacher teacher)
+        public async Task<ActionResult<Teacher>> PostTeacher(TeacherCreateDto dto)
         {
-            _context.Teachers.Add(teacher);
-            try
+            // Kiểm tra UserId có tồn tại
+            bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
+            if (!userExists)
+                return BadRequest($"UserId {dto.UserId} không tồn tại.");
+
+            // Tìm teacher có format mới
+            var lastTeacher = await _context.Teachers
+                .Where(t => t.TeacherId.StartsWith("Tch-"))
+                .OrderByDescending(t => t.TeacherId)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastTeacher != null)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (TeacherExists(teacher.TeacherId))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
+                string numberPart = lastTeacher.TeacherId.Substring(4);
+                nextNumber = int.Parse(numberPart) + 1;
             }
 
-            return CreatedAtAction("GetTeacher", new { id = teacher.TeacherId }, teacher);
+            string newTeacherId = $"Tch-{nextNumber:D5}";
+
+            var teacher = new Teacher
+            {
+                TeacherId = newTeacherId,
+                UserId = dto.UserId,
+                Status = "Active"
+            };
+
+            _context.Teachers.Add(teacher);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetTeacher), new { id = teacher.TeacherId }, teacher);
         }
+
 
         // DELETE: api/Teachers/5
         [HttpDelete("{id}")]
@@ -107,7 +116,19 @@ namespace QLSV_V1.Controllers
                 return NotFound();
             }
 
-            _context.Teachers.Remove(teacher);
+            teacher.Status = "Inactive";
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+        [HttpPut("restore/{id}")]
+        public async Task<IActionResult> RestoreTeacher(string id)
+        {
+            var teacher = await _context.Teachers.FindAsync(id);
+            if (teacher == null)
+                return NotFound();
+
+            teacher.Status = "Active";
             await _context.SaveChangesAsync();
 
             return NoContent();

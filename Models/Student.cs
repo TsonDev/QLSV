@@ -11,6 +11,8 @@ public partial class Student
 
     public string? AdvisorId { get; set; }
 
+    public string Status { get; set; } = null!;
+
     public virtual ICollection<Conduct> Conducts { get; set; } = new List<Conduct>();
 
     public virtual ICollection<Gpa> Gpas { get; set; } = new List<Gpa>();

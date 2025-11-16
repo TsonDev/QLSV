@@ -25,7 +25,8 @@ namespace QLSV_V1.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<User>>> GetUsers()
         {
-            return await _context.Users.ToListAsync();
+            return await _context.Users
+                .Where(u=>u.Status=="Active").ToListAsync();
         }
 
         // GET: api/Users/5
@@ -38,106 +39,109 @@ namespace QLSV_V1.Controllers
             {
                 return NotFound();
             }
+            if (user.Status == "Inactive")
+                return BadRequest("User is deleted.");
 
             return user;
         }
-
-        // PUT: api/Users/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutUser(string id, User user)
+        public async Task<IActionResult> PutUser(string id, UserUpdateDto dto)
         {
-            if (id != user.Id)
-            {
-                return BadRequest();
-            }
+            var user = await _context.Users.FindAsync(id);
+            if (user == null)
+                return NotFound();
 
-            _context.Entry(user).State = EntityState.Modified;
+            if (user.Status == "Inactive")
+                return BadRequest("User is deleted.");
 
-            try
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                user.Name = dto.Name;
+
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+                user.Email = dto.Email;
+
+            if (dto.Birthday != null)
+                user.Birthday = dto.Birthday;
+
+            if (!string.IsNullOrWhiteSpace(dto.Gender))
+                user.Gender = dto.Gender;
+
+            if (dto.PhoneNumber != null)
+                user.PhoneNumber = dto.PhoneNumber;
+
+            // UPDATE Address
+            if (dto.Address != null)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!UserExists(id))
+                var address = await _context.Addresses.FindAsync(user.AddId);
+                if (address != null)
                 {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
+                    if (!string.IsNullOrWhiteSpace(dto.Address.Province))
+                        address.Province = dto.Address.Province;
+
+                    if (!string.IsNullOrWhiteSpace(dto.Address.District))
+                        address.District = dto.Address.District;
+
+                    if (!string.IsNullOrWhiteSpace(dto.Address.Infor))
+                        address.Infor = dto.Address.Infor;
                 }
             }
 
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 
-        // POST: api/Users
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        /* [HttpPost]
-         public async Task<ActionResult<User>> PostUser(User user)
-         {
-             _context.Users.Add(user);
-             try
-             {
-                 await _context.SaveChangesAsync();
-             }
-             catch (DbUpdateException)
-             {
-                 if (UserExists(user.Id))
-                 {
-                     return Conflict();
-                 }
-                 else
-                 {
-                     throw;
-                 }
-             }
-
-             return CreatedAtAction("GetUser", new { id = user.Id }, user);
-         }*/
         [HttpPost]
-        public async Task<ActionResult<User>> PostUser([FromBody] UserCreateDto dto)
+        public async Task<ActionResult<User>> PostUser(UserCreateDto dto)
         {
+            // Kiểm tra account tồn tại
             var accExists = await _context.Accounts.AnyAsync(a => a.AccId == dto.AccId);
             if (!accExists)
-            {
-                return BadRequest($"Không tồn tại account id{dto.AccId}");
-            }
+                return BadRequest($"Không tồn tại account id {dto.AccId}");
+
+            // Tự sinh AddId
             var newAddress = new Address
             {
-                AddId = "Add-" + Guid.NewGuid().ToString("N").Substring(0, 6),
+                AddId = "Add-" + Guid.NewGuid().ToString("N")[..6],
                 Province = dto.Address.Province,
                 District = dto.Address.District,
                 Infor = dto.Address.Infor
             };
+
             _context.Addresses.Add(newAddress);
+
+            // Tự sinh UserId
+            var lastUser = await _context.Users
+                .Where(u => u.Id.StartsWith("usr-"))
+                .OrderByDescending(u => u.Id)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastUser != null)
+            {
+                string numberPart = lastUser.Id.Substring(4);
+                nextNumber = int.Parse(numberPart) + 1;
+            }
+
+            string newUserId = $"usr-{nextNumber:D5}";
+
+            var user = new User
+            {
+                Id = newUserId,
+                Name = dto.Name,
+                Email = dto.Email,
+                Gender = dto.Gender,
+                Birthday = dto.Birthday,
+                PhoneNumber = dto.PhoneNumber,
+                AccId = dto.AccId,
+                AddId = newAddress.AddId,
+                Status = "Active"
+            };
+
+            _context.Users.Add(user);
+
             await _context.SaveChangesAsync();
-            var user = new User{
-               Id = dto.Id,
-               Name = dto.Name,
-               Email = dto.Email,
-               Birthday = dto.Birthday,
-               Gender = dto.Gender,
-               PhoneNumber = dto.PhoneNumber,
-               AccId = dto.AccId,
-               AddId = newAddress.AddId,
-              
-           };
-           _context.Users.Add(user);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (Exception)
-            {
-                if (UserExists(user.Id))
-                {
-                    return Conflict(new {message = $"UserID{user.Id} đã tồn tại"});
-                }
-                throw;
-            }
+
             var result = new
             {
                 user.Id,
@@ -158,6 +162,7 @@ namespace QLSV_V1.Controllers
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, result);
         }
 
+
         // DELETE: api/Users/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(string id)
@@ -168,7 +173,7 @@ namespace QLSV_V1.Controllers
                 return NotFound();
             }
 
-            _context.Users.Remove(user);
+            user.Status = "Inactive";
             await _context.SaveChangesAsync();
 
             return NoContent();
@@ -178,5 +183,17 @@ namespace QLSV_V1.Controllers
         {
             return _context.Users.Any(e => e.Id == id);
         }
+        [HttpPut("restore/{id}")]
+        public async Task<IActionResult> RestoreUser(string id)
+        {
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound();
+
+            user.Status = "Active";
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
     }
 }

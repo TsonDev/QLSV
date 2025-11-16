@@ -24,7 +24,9 @@ namespace QLSV_V1.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Advisor>>> GetAdvisors()
         {
-            return await _context.Advisors.ToListAsync();
+            return await _context.Advisors
+                .Where(a => a.Status == "Active")
+                .ToListAsync();
         }
 
         // GET: api/Advisors/5
@@ -34,80 +36,104 @@ namespace QLSV_V1.Controllers
             var advisor = await _context.Advisors.FindAsync(id);
 
             if (advisor == null)
-            {
                 return NotFound();
-            }
+
+            if (advisor.Status == "Inactive")
+                return BadRequest("Advisor is deleted.");
 
             return advisor;
         }
 
         // PUT: api/Advisors/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutAdvisor(string id, Advisor advisor)
+        public async Task<IActionResult> PutAdvisor(string id, AdvisorUpdateDto dto)
         {
-            if (id != advisor.AdvisorId)
+            var advisor = await _context.Advisors.FindAsync(id);
+            if (advisor == null)
+                return NotFound();
+
+            if (advisor.Status == "Inactive")
+                return BadRequest("Advisor is deleted.");
+
+            // Update UserId
+            if (!string.IsNullOrWhiteSpace(dto.UserId))
             {
-                return BadRequest();
+                bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
+                if (!userExists)
+                    return BadRequest($"UserId {dto.UserId} không tồn tại.");
+
+                advisor.UserId = dto.UserId;
             }
 
-            _context.Entry(advisor).State = EntityState.Modified;
+            // Update Status
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+                advisor.Status = dto.Status;
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!AdvisorExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 
         // POST: api/Advisors
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Advisor>> PostAdvisor(Advisor advisor)
+        public async Task<ActionResult<Advisor>> PostAdvisor(AdvisorCreateDto dto)
         {
-            _context.Advisors.Add(advisor);
-            try
+            // Kiểm tra UserId
+            bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
+            if (!userExists)
+                return BadRequest($"UserId {dto.UserId} không tồn tại.");
+
+            // Sinh ID mới theo format: Adv-00001
+            var lastAdvisor = await _context.Advisors
+                .Where(a => a.AdvisorId.StartsWith("Adv-"))
+                .OrderByDescending(a => a.AdvisorId)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastAdvisor != null)
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (AdvisorExists(advisor.AdvisorId))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
+                string numberPart = lastAdvisor.AdvisorId.Substring(4);
+                nextNumber = int.Parse(numberPart) + 1;
             }
 
-            return CreatedAtAction("GetAdvisor", new { id = advisor.AdvisorId }, advisor);
+            string newAdvisorId = $"Adv-{nextNumber:D5}";
+
+            var advisor = new Advisor
+            {
+                AdvisorId = newAdvisorId,
+                UserId = dto.UserId,
+                Status = "Active"
+            };
+
+            _context.Advisors.Add(advisor);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(nameof(GetAdvisor), new { id = advisor.AdvisorId }, advisor);
         }
 
-        // DELETE: api/Advisors/5
+        // DELETE (soft delete)
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAdvisor(string id)
         {
             var advisor = await _context.Advisors.FindAsync(id);
             if (advisor == null)
-            {
                 return NotFound();
-            }
 
-            _context.Advisors.Remove(advisor);
+            advisor.Status = "Inactive";
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
+        // RESTORE
+        [HttpPut("restore/{id}")]
+        public async Task<IActionResult> RestoreAdvisor(string id)
+        {
+            var advisor = await _context.Advisors.FindAsync(id);
+            if (advisor == null)
+                return NotFound();
+
+            advisor.Status = "Active";
             await _context.SaveChangesAsync();
 
             return NoContent();

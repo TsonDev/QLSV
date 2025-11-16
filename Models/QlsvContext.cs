@@ -6,10 +6,6 @@ namespace QLSV_V1.Models;
 
 public partial class QlsvContext : DbContext
 {
-    public QlsvContext()
-    {
-    }
-
     public QlsvContext(DbContextOptions<QlsvContext> options)
         : base(options)
     {
@@ -38,8 +34,6 @@ public partial class QlsvContext : DbContext
     public virtual DbSet<Teacher> Teachers { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
-
-
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -93,6 +87,9 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(30)
                 .IsFixedLength()
                 .HasColumnName("AdvisorID");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
             entity.Property(e => e.UserId)
                 .HasMaxLength(30)
                 .IsFixedLength()
@@ -211,6 +208,9 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(30)
                 .IsFixedLength()
                 .HasColumnName("AdvisorID");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
             entity.Property(e => e.UserId)
                 .HasMaxLength(30)
                 .IsFixedLength()
@@ -278,6 +278,9 @@ public partial class QlsvContext : DbContext
                 .HasColumnName("ID");
             entity.Property(e => e.Name).HasMaxLength(50);
             entity.Property(e => e.SoTc).HasColumnName("SoTC");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
             entity.Property(e => e.Type)
                 .HasMaxLength(10)
                 .IsFixedLength();
@@ -291,6 +294,9 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(30)
                 .IsFixedLength()
                 .HasColumnName("TeacherID");
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
             entity.Property(e => e.UserId)
                 .HasMaxLength(10)
                 .IsFixedLength()
@@ -316,6 +322,9 @@ public partial class QlsvContext : DbContext
             entity.Property(e => e.Email).HasMaxLength(50);
             entity.Property(e => e.Gender).HasMaxLength(10);
             entity.Property(e => e.Name).HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("Active");
 
             entity.HasOne(d => d.Acc).WithMany(p => p.Users)
                 .HasForeignKey(d => d.AccId)

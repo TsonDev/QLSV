@@ -24,7 +24,7 @@ namespace QLSV_V1.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Student>>> GetStudents()
         {
-            return await _context.Students.ToListAsync();
+            return await _context.Students.Where(a=>a.Status=="Active").ToListAsync();
         }
 
         // GET: api/Students/5
@@ -37,121 +37,86 @@ namespace QLSV_V1.Controllers
             {
                 return NotFound();
             }
+            if (student.Status == "Inactive")
+                return BadRequest("Student is deleted.");
 
             return student;
         }
 
-        // PUT: api/Students/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
-        public async Task<IActionResult> PutStudent(string id, Student student)
+        public async Task<IActionResult> PutStudent(string id, StudentUpdateDto dto)
         {
-            if (id != student.StudentId)
-            {
-                return BadRequest();
-            }
+            var student = await _context.Students.FindAsync(id);
+            if (student == null)
+                return NotFound();
 
-            _context.Entry(student).State = EntityState.Modified;
+            if (student.Status == "Inactive")
+                return BadRequest("Student is deleted.");
 
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!StudentExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            if (!string.IsNullOrWhiteSpace(dto.UserId))
+                student.UserId = dto.UserId;
 
+            if (!string.IsNullOrWhiteSpace(dto.AdvisorId))
+                student.AdvisorId = dto.AdvisorId;
+
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+                student.Status = dto.Status;
+
+            await _context.SaveChangesAsync();
             return NoContent();
         }
 
-        // POST: api/Students
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-       /* [HttpPost]
-        public async Task<ActionResult<Student>> PostStudent(Student student)
-        {
-            _context.Students.Add(student);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (StudentExists(student.StudentId))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return CreatedAtAction("GetStudent", new { id = student.StudentId }, student);
-        }*/
-      
 
         [HttpPost]
-        public async Task<ActionResult<Student>> PostStudent([FromBody] StudentCreateDto dto)
+        public async Task<ActionResult<Student>> PostStudent(StudentCreateDto dto)
         {
-            // Kiểm tra User có tồn tại chưa
             var userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
             if (!userExists)
-            {
                 return BadRequest(new { message = $"UserId {dto.UserId} không tồn tại." });
+
+            // Tự sinh StudentId
+            var lastStudent = await _context.Students
+                .OrderByDescending(s => s.StudentId)
+                .FirstOrDefaultAsync();
+
+            int nextNumber = 1;
+
+            if (lastStudent != null)
+            {
+                string numberPart = lastStudent.StudentId.Substring(4);
+                nextNumber = int.Parse(numberPart) + 1;
             }
 
-            // Tạo Student mới
+            string newStudentId = $"Stu-{nextNumber.ToString("D5")}";
+
             var student = new Student
             {
-                StudentId = dto.StudentId,
+                StudentId = newStudentId,
                 UserId = dto.UserId,
                 AdvisorId = dto.AdvisorId,
+                Status = "Active"
             };
 
             _context.Students.Add(student);
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (StudentExists(student.StudentId))
-                {
-                    return Conflict(new { message = $"StudentId {student.StudentId} đã tồn tại." });
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetStudent", new { id = student.StudentId }, student);
         }
 
-        // DELETE: api/Students/5
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteStudent(string id)
         {
             var student = await _context.Students.FindAsync(id);
             if (student == null)
-            {
                 return NotFound();
-            }
 
-            _context.Students.Remove(student);
+            student.Status = "Inactive";
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
+
 
         private bool StudentExists(string id)
         {
@@ -161,6 +126,7 @@ namespace QLSV_V1.Controllers
         public async Task<IActionResult> GetStudentsFull()
         {
             var data = await _context.Students
+                .Where(s=>s.Status=="Active")
                 .Include(s => s.User)
                 .Include(s => s.Gpas)
                 .Include(s => s.Conducts)
@@ -182,6 +148,18 @@ namespace QLSV_V1.Controllers
 
             return Ok(data);
         }
+        [HttpPut("restore/{id}")]
+        public async Task<IActionResult> RestoreStudent(string id)
+        {
+            var student = await _context.Students.FindAsync(id);
+            if (student == null) return NotFound();
+
+            student.Status = "Active";
+            await _context.SaveChangesAsync();
+
+            return NoContent();
+        }
+
 
 
     }

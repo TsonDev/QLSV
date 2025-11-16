@@ -8,4 +8,6 @@ public partial class Teacher
     public string TeacherId { get; set; } = null!;
 
     public string? UserId { get; set; }
+
+    public string Status { get; set; } = null!;
 }
