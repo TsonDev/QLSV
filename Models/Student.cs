@@ -13,6 +13,8 @@ public partial class Student
 
     public string Status { get; set; } = null!;
 
+    public string? AcademicStatus { get; set; }
+
     public virtual ICollection<Conduct> Conducts { get; set; } = new List<Conduct>();
 
     public virtual ICollection<Gpa> Gpas { get; set; } = new List<Gpa>();
@@ -20,4 +22,6 @@ public partial class Student
     public virtual ICollection<StudentSubject> StudentSubjects { get; set; } = new List<StudentSubject>();
 
     public virtual User? User { get; set; }
+    public virtual Advisor? Advisor { get; set; }
+    public virtual Class? Class { get; set; }
 }

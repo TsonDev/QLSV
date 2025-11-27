@@ -21,83 +21,86 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
-        // GET: api/Subjects
+        // GET LIST
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Subject>>> GetSubjects()
+        public async Task<IActionResult> GetSubjects()
         {
-            return await _context.Subjects
-                .Where(s=>s.Status=="Active").ToListAsync();
+            var data = await _context.Subjects
+                .Where(s => s.Status == "Active")
+                .Select(s => new {
+                    Id = s.Id.Trim(),
+                    s.Name,
+                    s.Type,
+                    SoTc = s.SoTc,
+                    s.CurriculumTerm,
+                    s.Status
+                })
+                .ToListAsync();
+
+            return Ok(data);
         }
 
-        // GET: api/Subjects/5
+        // GET DETAIL
         [HttpGet("{id}")]
-        public async Task<ActionResult<Subject>> GetSubject(string id)
+        public async Task<IActionResult> GetSubject(string id)
         {
-            var subject = await _context.Subjects.FindAsync(id);
-
-            if (subject == null)
-            {
-                return NotFound();
-            }
-            if (subject.Status == "Inactive")
-                return BadRequest("Subject is deleted.");
-            return subject;
-        }
-
-        // PUT: api/Subjects/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSubject(string id, SubjectUpdateDto dto)
-        {
-            var subject = await _context.Subjects.FindAsync(id);
-            if (subject == null)
-                return NotFound();
-
-            if (subject.Status == "Inactive")
-                return BadRequest("Subject is deleted.");
-
-            if (!string.IsNullOrWhiteSpace(dto.Type))
-                subject.Type = dto.Type;
-
-            if (!string.IsNullOrWhiteSpace(dto.Name))
-                subject.Name = dto.Name;
-
-            if (dto.SoTc != null)
-                subject.SoTc = dto.SoTc;
-
-            if (dto.CurriculumTerm != null)
-                subject.CurriculumTerm = dto.CurriculumTerm;
-
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-
-        // POST: api/Subjects
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPost]
-        public async Task<ActionResult<Subject>> PostSubject(SubjectCreateDto dto)
-        {
-            // Lấy Subject cuối cùng
-            var lastSubject = await _context.Subjects
-                .OrderByDescending(s => s.Id)
+            var subject = await _context.Subjects
+                .Where(s => s.Id.Trim() == id.Trim())
+                .Select(s => new {
+                    Id = s.Id.Trim(),
+                    s.Name,
+                    s.Type,
+                    SoTc = s.SoTc,
+                    s.CurriculumTerm,
+                    s.Status
+                })
                 .FirstOrDefaultAsync();
 
-            int nextNumber = 1;
+            if (subject == null)
+                return NotFound();
 
-            if (lastSubject != null && lastSubject.Id.StartsWith("Sub-"))
+            return Ok(subject);
+        }
+
+        // AUTO GENERATE SubjectId
+        private async Task<string> GenerateSubjectId()
+        {
+            var ids = await _context.Subjects
+                .Select(s => s.Id.Trim())
+                .ToListAsync();
+
+            int max = 0;
+
+            foreach (var id in ids)
             {
-                string numberPart = lastSubject.Id.Substring(4);
-                nextNumber = int.Parse(numberPart) + 1;
+                if (id.StartsWith("Sub-") && int.TryParse(id.Substring(4), out int num))
+                {
+                    if (num > max)
+                        max = num;
+                }
             }
 
-            string newSubjectId = $"Sub-{nextNumber:D5}";
+            return $"Sub-{(max + 1):D5}";
+        }
+
+        // CREATE
+        [HttpPost]
+        public async Task<IActionResult> PostSubject(SubjectCreateDto dto)
+        {
+            // Kiểm tra trùng tên môn
+            bool nameExists = await _context.Subjects
+                .AnyAsync(s => s.Name == dto.Name);
+            if (nameExists)
+                return BadRequest("Tên môn đã tồn tại.");
+
+            string newId = await GenerateSubjectId();
+            string finalId = newId.PadRight(30);
 
             var subject = new Subject
             {
-                Id = newSubjectId,
-                Type = dto.Type,
+                Id = finalId,
                 Name = dto.Name,
+                Type = dto.Type,
                 SoTc = dto.SoTc,
                 CurriculumTerm = dto.CurriculumTerm,
                 Status = "Active"
@@ -106,21 +109,47 @@ namespace QLSV_V1.Controllers
             _context.Subjects.Add(subject);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetSubject), new { id = subject.Id }, subject);
+            return Ok(new { message = "Tạo môn học thành công", subjectId = newId });
         }
 
+        // UPDATE
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutSubject(string id, SubjectUpdateDto dto)
+        {
+            var subject = await _context.Subjects
+                .FirstOrDefaultAsync(s => s.Id.Trim() == id.Trim());
 
+            if (subject == null)
+                return NotFound();
 
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                subject.Name = dto.Name;
 
-        // DELETE: api/Subjects/5
+            if (!string.IsNullOrWhiteSpace(dto.Type))
+                subject.Type = dto.Type;
+
+            if (dto.SoTc != null)
+                subject.SoTc = dto.SoTc;
+
+            if (dto.CurriculumTerm != null)
+                subject.CurriculumTerm = dto.CurriculumTerm;
+
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+                subject.Status = dto.Status;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+
+        // DELETE (SOFT)
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteSubject(string id)
         {
-            var subject = await _context.Subjects.FindAsync(id);
+            var subject = await _context.Subjects
+                .FirstOrDefaultAsync(s => s.Id.Trim() == id.Trim());
+
             if (subject == null)
-            {
                 return NotFound();
-            }
 
             subject.Status = "Inactive";
             await _context.SaveChangesAsync();
@@ -128,9 +157,39 @@ namespace QLSV_V1.Controllers
             return NoContent();
         }
 
-        private bool SubjectExists(string id)
+        // RESTORE
+        [HttpPut("restore/{id}")]
+        public async Task<IActionResult> RestoreSubject(string id)
         {
-            return _context.Subjects.Any(e => e.Id == id);
+            var subject = await _context.Subjects
+                .FirstOrDefaultAsync(s => s.Id.Trim() == id.Trim());
+
+            if (subject == null)
+                return NotFound();
+
+            subject.Status = "Active";
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
+        //Lấy danh sách giảng viên theo môn
+        [HttpGet("by-teacher/{subjectId}")]
+        public async Task<IActionResult> GetTeachersBySubject(string subjectId)
+        {
+            var teachers = await _context.TeacherSubjects
+                .Where(ts => ts.SubjectId.Trim() == subjectId.Trim() && ts.Status == "Active")
+                .Include(ts => ts.Teacher)
+                .ThenInclude(t => t.User)
+                .Select(ts => new {
+                    TeacherId = ts.Teacher.TeacherId.Trim(),
+                    Name = ts.Teacher.User.Name.Trim(),
+                    Email = ts.Teacher.User.Email.Trim()
+                })
+                .ToListAsync();
+
+            return Ok(teachers);
+        }
+
     }
+
 }

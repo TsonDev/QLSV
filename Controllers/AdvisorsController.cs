@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -20,87 +15,78 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
-        // GET: api/Advisors
+        // =====================================================================
+        // 1) GET LIST (JOIN USER) — ACTIVE ONLY
+        // =====================================================================
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Advisor>>> GetAdvisors()
+        public async Task<IActionResult> GetAdvisors()
         {
-            return await _context.Advisors
+            var data = await _context.Advisors
                 .Where(a => a.Status == "Active")
+                .Include(a => a.User)
+                .Select(a => new {
+                    AdvisorId = a.AdvisorId.Trim(),
+                    Name = a.User != null ? a.User.Name.Trim() : null,
+                    Email = a.User != null ? a.User.Email.Trim() : null,
+                    Status = a.Status
+                })
                 .ToListAsync();
+
+            return Ok(data);
         }
 
-        // GET: api/Advisors/5
+        // =====================================================================
+        // 2) GET DETAIL (JOIN USER)
+        // =====================================================================
         [HttpGet("{id}")]
-        public async Task<ActionResult<Advisor>> GetAdvisor(string id)
+        public async Task<IActionResult> GetAdvisor(string id)
         {
-            var advisor = await _context.Advisors.FindAsync(id);
+            var advisor = await _context.Advisors
+                .Where(a => a.AdvisorId.Trim() == id.Trim())
+                .Include(a => a.User)
+                .Select(a => new {
+                    AdvisorId = a.AdvisorId.Trim(),
+                    a.Status,
+                    User = a.User == null ? null : new
+                    {
+                        a.User.Name,
+                        a.User.Email,
+                        a.User.PhoneNumber,
+                        a.User.Birthday
+                    }
+                })
+                .FirstOrDefaultAsync();
 
             if (advisor == null)
-                return NotFound();
+                return NotFound("Không tìm thấy advisor.");
 
-            if (advisor.Status == "Inactive")
-                return BadRequest("Advisor is deleted.");
-
-            return advisor;
+            return Ok(advisor);
         }
 
-        // PUT: api/Advisors/5
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutAdvisor(string id, AdvisorUpdateDto dto)
-        {
-            var advisor = await _context.Advisors.FindAsync(id);
-            if (advisor == null)
-                return NotFound();
-
-            if (advisor.Status == "Inactive")
-                return BadRequest("Advisor is deleted.");
-
-            // Update UserId
-            if (!string.IsNullOrWhiteSpace(dto.UserId))
-            {
-                bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
-                if (!userExists)
-                    return BadRequest($"UserId {dto.UserId} không tồn tại.");
-
-                advisor.UserId = dto.UserId;
-            }
-
-            // Update Status
-            if (!string.IsNullOrWhiteSpace(dto.Status))
-                advisor.Status = dto.Status;
-
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        // POST: api/Advisors
+        // =====================================================================
+        // 3) CREATE ADVISOR
+        // =====================================================================
         [HttpPost]
-        public async Task<ActionResult<Advisor>> PostAdvisor(AdvisorCreateDto dto)
+        public async Task<IActionResult> PostAdvisor(AdvisorCreateDto dto)
         {
-            // Kiểm tra UserId
-            bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
-            if (!userExists)
+            // Validate UserId
+            if (!await _context.Users.AnyAsync(u => u.Id == dto.UserId))
                 return BadRequest($"UserId {dto.UserId} không tồn tại.");
 
-            // Sinh ID mới theo format: Adv-00001
-            var lastAdvisor = await _context.Advisors
-                .Where(a => a.AdvisorId.StartsWith("Adv-"))
+            // Generate ID Adv-00001
+            var last = await _context.Advisors
                 .OrderByDescending(a => a.AdvisorId)
                 .FirstOrDefaultAsync();
 
-            int nextNumber = 1;
+            int next = 1;
+            if (last != null && last.AdvisorId.StartsWith("Adv-"))
+                next = int.Parse(last.AdvisorId.Substring(4)) + 1;
 
-            if (lastAdvisor != null)
-            {
-                string numberPart = lastAdvisor.AdvisorId.Substring(4);
-                nextNumber = int.Parse(numberPart) + 1;
-            }
-
-            string newAdvisorId = $"Adv-{nextNumber:D5}";
+            string newId = $"Adv-{next:D5}";
 
             var advisor = new Advisor
             {
-                AdvisorId = newAdvisorId,
+                AdvisorId = newId,
                 UserId = dto.UserId,
                 Status = "Active"
             };
@@ -108,14 +94,56 @@ namespace QLSV_V1.Controllers
             _context.Advisors.Add(advisor);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetAdvisor), new { id = advisor.AdvisorId }, advisor);
+            return Ok(new { message = "Tạo advisor thành công!", advisorId = newId });
         }
 
-        // DELETE (soft delete)
+        // =====================================================================
+        // 4) UPDATE (FULL)
+        // =====================================================================
+        [HttpPut("full/{id}")]
+        public async Task<IActionResult> UpdateAdvisorFull(string id, AdvisorUpdateDto dto)
+        {
+            var advisor = await _context.Advisors
+                .Include(a => a.User)
+                .FirstOrDefaultAsync(a => a.AdvisorId.Trim() == id.Trim());
+
+            if (advisor == null)
+                return NotFound("Advisor không tồn tại.");
+
+            // =========== UPDATE USER ===========
+            if (advisor.User != null)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.Name))
+                    advisor.User.Name = dto.Name;
+
+                if (!string.IsNullOrWhiteSpace(dto.Email))
+                    advisor.User.Email = dto.Email;
+
+                if (dto.PhoneNumber != null)
+                    advisor.User.PhoneNumber = dto.PhoneNumber;
+
+                if (dto.Birthday != null)
+                    advisor.User.Birthday = dto.Birthday;
+            }
+
+            // =========== UPDATE ADVISOR ===========
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+                advisor.Status = dto.Status;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật advisor thành công!" });
+        }
+
+        // =====================================================================
+        // 5) SOFT DELETE
+        // =====================================================================
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAdvisor(string id)
         {
-            var advisor = await _context.Advisors.FindAsync(id);
+            var advisor = await _context.Advisors
+                .FirstOrDefaultAsync(a => a.AdvisorId.Trim() == id.Trim());
+
             if (advisor == null)
                 return NotFound();
 
@@ -125,11 +153,15 @@ namespace QLSV_V1.Controllers
             return NoContent();
         }
 
-        // RESTORE
+        // =====================================================================
+        // 6) RESTORE
+        // =====================================================================
         [HttpPut("restore/{id}")]
         public async Task<IActionResult> RestoreAdvisor(string id)
         {
-            var advisor = await _context.Advisors.FindAsync(id);
+            var advisor = await _context.Advisors
+                .FirstOrDefaultAsync(a => a.AdvisorId.Trim() == id.Trim());
+
             if (advisor == null)
                 return NotFound();
 
@@ -139,9 +171,53 @@ namespace QLSV_V1.Controllers
             return NoContent();
         }
 
-        private bool AdvisorExists(string id)
+        // =====================================================================
+        // 7) ASSIGN ADVISOR TO STUDENT
+        // =====================================================================
+        [HttpPost("assign-student")]
+        public async Task<IActionResult> AssignAdvisorToStudent(AssignAdvisorDto dto)
         {
-            return _context.Advisors.Any(e => e.AdvisorId == id);
+            var advisor = await _context.Advisors
+                .FirstOrDefaultAsync(a => a.AdvisorId.Trim() == dto.AdvisorId.Trim());
+
+            if (advisor == null || advisor.Status == "Inactive")
+                return BadRequest("AdvisorId không hợp lệ.");
+
+            var student = await _context.Students
+                .FirstOrDefaultAsync(s => s.StudentId.Trim() == dto.StudentId.Trim());
+
+            if (student == null)
+                return BadRequest("StudentId không tồn tại.");
+
+            student.AdvisorId = dto.AdvisorId;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Gán cố vấn cho sinh viên thành công!" });
         }
+
+        // =====================================================================
+        // 8) GET STUDENTS OF ADVISOR
+        // =====================================================================
+        [HttpGet("{advisorId}/students")]
+        public async Task<IActionResult> GetStudentsOfAdvisor(string advisorId)
+        {
+            var students = await _context.Students
+                .Where(s => s.AdvisorId.Trim() == advisorId.Trim() && s.Status == "Active")
+                .Include(s => s.User)
+                .Select(s => new {
+                    StudentId = s.StudentId.Trim(),
+                    Name = s.User != null ? s.User.Name : null,
+                    Email = s.User != null ? s.User.Email : null,
+                    PhoneNumber = s.User != null ? s.User.PhoneNumber : null,
+                    Gender = s.User != null ? s.User.Gender : null,
+                    Birthday = s.User != null ? s.User.Birthday : null,
+                    
+                })
+                .ToListAsync();
+
+            return Ok(students);
+        }
+
     }
 }

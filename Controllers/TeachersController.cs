@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -20,81 +15,77 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
-        // GET: api/Teachers
+        // ============================================================
+        // 1) GET LIST BASIC
+        // ============================================================
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Teacher>>> GetTeachers()
+        public async Task<IActionResult> GetTeachers()
         {
-            return await _context.Teachers.Where(t=>t.Status=="Active").ToListAsync();
+            var data = await _context.Teachers
+                .Where(t => t.Status == "Active")
+                .Include(t => t.User)
+                .Select(t => new {
+                    TeacherId = t.TeacherId.Trim(),
+                    Name = t.User != null ? t.User.Name.Trim() : null,
+                    Email = t.User != null ? t.User.Email.Trim() : null,
+                    Status = t.Status
+                })
+                .ToListAsync();
+
+            return Ok(data);
         }
 
-        // GET: api/Teachers/5
+        // ============================================================
+        // 2) GET DETAIL
+        // ============================================================
         [HttpGet("{id}")]
-        public async Task<ActionResult<Teacher>> GetTeacher(string id)
+        public async Task<IActionResult> GetTeacher(string id)
         {
-            var teacher = await _context.Teachers.FindAsync(id);
+            var data = await _context.Teachers
+                .Where(t => t.TeacherId.Trim() == id.Trim())
+                .Include(t => t.User)
+                .Select(t => new {
+                    TeacherId = t.TeacherId.Trim(),
+                    t.Status,
+                    User = t.User == null ? null : new
+                    {
+                        t.User.Name,
+                        t.User.Email,
+                        t.User.PhoneNumber,
+                        t.User.Birthday
+                    }
+                })
+                .FirstOrDefaultAsync();
 
-            if (teacher == null)
-            {
+            if (data == null)
                 return NotFound();
-            }
-            if (teacher.Status == "Inactive")
-                return BadRequest("Teacher is deleted.");
-            return teacher;
+
+            return Ok(data);
         }
 
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutTeacher(string id, TeacherUpdateDto dto)
-        {
-            var teacher = await _context.Teachers.FindAsync(id);
-            if (teacher == null)
-                return NotFound();
-
-            if (teacher.Status == "Inactive")
-                return BadRequest("Teacher is deleted.");
-
-            // Nếu FE sửa UserId thì kiểm tra tài khoản User có tồn tại hay không
-            if (!string.IsNullOrWhiteSpace(dto.UserId))
-            {
-                bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
-                if (!userExists)
-                    return BadRequest($"UserId {dto.UserId} không tồn tại.");
-
-                teacher.UserId = dto.UserId;
-            }
-
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        // POST: api/Teachers
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        // ============================================================
+        // 3) CREATE TEACHER
+        // ============================================================
         [HttpPost]
-        public async Task<ActionResult<Teacher>> PostTeacher(TeacherCreateDto dto)
+        public async Task<IActionResult> PostTeacher(TeacherCreateDto dto)
         {
-            // Kiểm tra UserId có tồn tại
-            bool userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
-            if (!userExists)
+            if (!await _context.Users.AnyAsync(u => u.Id == dto.UserId))
                 return BadRequest($"UserId {dto.UserId} không tồn tại.");
 
-            // Tìm teacher có format mới
-            var lastTeacher = await _context.Teachers
-                .Where(t => t.TeacherId.StartsWith("Tch-"))
+            // Generate ID
+            var last = await _context.Teachers
                 .OrderByDescending(t => t.TeacherId)
                 .FirstOrDefaultAsync();
 
-            int nextNumber = 1;
+            int next = 1;
+            if (last != null && last.TeacherId.StartsWith("Tch-"))
+                next = int.Parse(last.TeacherId.Substring(4)) + 1;
 
-            if (lastTeacher != null)
-            {
-                string numberPart = lastTeacher.TeacherId.Substring(4);
-                nextNumber = int.Parse(numberPart) + 1;
-            }
-
-            string newTeacherId = $"Tch-{nextNumber:D5}";
+            string newId = $"Tch-{next:D5}".PadRight(30);
 
             var teacher = new Teacher
             {
-                TeacherId = newTeacherId,
+                TeacherId = newId,
                 UserId = dto.UserId,
                 Status = "Active"
             };
@@ -102,29 +93,75 @@ namespace QLSV_V1.Controllers
             _context.Teachers.Add(teacher);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetTeacher), new { id = teacher.TeacherId }, teacher);
+            return Ok(new { message = "Tạo giảng viên thành công", teacherId = newId.Trim() });
+        }
+
+        // ============================================================
+        // 4) UPDATE TEACHER
+        // ============================================================
+        [HttpPut("full/{id}")]
+        public async Task<IActionResult> UpdateTeacherFull(string id, TeacherUpdateDto dto)
+        {
+            var teacher = await _context.Teachers
+                .Include(t => t.User)
+                .FirstOrDefaultAsync(t => t.TeacherId.Trim() == id.Trim());
+
+            if (teacher == null)
+                return NotFound("Không tìm thấy giảng viên.");
+
+            // ========== UPDATE USER ==========
+            if (teacher.User != null)
+            {
+                if (!string.IsNullOrWhiteSpace(dto.Name))
+                    teacher.User.Name = dto.Name;
+
+                if (!string.IsNullOrWhiteSpace(dto.Email))
+                    teacher.User.Email = dto.Email;
+
+                if (dto.PhoneNumber != null)
+                    teacher.User.PhoneNumber = dto.PhoneNumber;
+
+                if (dto.Birthday != null)
+                    teacher.User.Birthday = dto.Birthday;
+            }
+
+            // ========== UPDATE TEACHER ==========
+            if (!string.IsNullOrWhiteSpace(dto.Status))
+                teacher.Status = dto.Status;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật giảng viên thành công!" });
         }
 
 
-        // DELETE: api/Teachers/5
+        // ============================================================
+        // 5) SOFT DELETE
+        // ============================================================
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTeacher(string id)
         {
-            var teacher = await _context.Teachers.FindAsync(id);
+            var teacher = await _context.Teachers
+                .FirstOrDefaultAsync(t => t.TeacherId.Trim() == id.Trim());
+
             if (teacher == null)
-            {
                 return NotFound();
-            }
 
             teacher.Status = "Inactive";
             await _context.SaveChangesAsync();
 
             return NoContent();
         }
+
+        // ============================================================
+        // 6) RESTORE TEACHER
+        // ============================================================
         [HttpPut("restore/{id}")]
         public async Task<IActionResult> RestoreTeacher(string id)
         {
-            var teacher = await _context.Teachers.FindAsync(id);
+            var teacher = await _context.Teachers
+                .FirstOrDefaultAsync(t => t.TeacherId.Trim() == id.Trim());
+
             if (teacher == null)
                 return NotFound();
 
@@ -134,9 +171,162 @@ namespace QLSV_V1.Controllers
             return NoContent();
         }
 
-        private bool TeacherExists(string id)
+        // ============================================================
+        // 7) GET TEACHERS BY SUBJECT (FE dùng để chọn gv theo môn)
+        // ============================================================
+        [HttpGet("by-subject/{subjectId}")]
+        public async Task<IActionResult> GetTeachersBySubject(string subjectId)
         {
-            return _context.Teachers.Any(e => e.TeacherId == id);
+            var teachers = await _context.TeacherSubjects
+                .Where(ts => ts.SubjectId.Trim() == subjectId.Trim() && ts.Status == "Active")
+                .Include(ts => ts.Teacher).ThenInclude(t => t.User)
+                .Select(ts => new {
+                    TeacherId = ts.Teacher.TeacherId.Trim(),
+                    Name = ts.Teacher.User.Name.Trim(),
+                    Email = ts.Teacher.User.Email.Trim()
+                })
+                .ToListAsync();
+
+            return Ok(teachers);
+        }
+
+        // ============================================================
+        // 8) ASSIGN TEACHER TO SUBJECT
+        // ============================================================
+        [HttpPost("assign-subject")]
+        public async Task<IActionResult> AssignTeacherToSubject(AssignTeacherSubjectDto dto)
+        {
+            if (!await _context.Teachers.AnyAsync(t => t.TeacherId == dto.TeacherId))
+                return BadRequest("TeacherId không tồn tại.");
+
+            if (!await _context.Subjects.AnyAsync(s => s.Id == dto.SubjectId))
+                return BadRequest("SubjectId không tồn tại.");
+
+            bool exists = await _context.TeacherSubjects.AnyAsync(ts =>
+                ts.TeacherId == dto.TeacherId &&
+                ts.SubjectId == dto.SubjectId &&
+                ts.Status == "Active"
+            );
+
+            if (exists)
+                return BadRequest("Giảng viên đã được gán môn này.");
+
+            var item = new TeacherSubject
+            {
+                TeacherId = dto.TeacherId,
+                SubjectId = dto.SubjectId,
+                Status = "Active"
+            };
+
+            _context.TeacherSubjects.Add(item);
+            await _context.SaveChangesAsync();
+
+            return Ok("Gán giáo viên dạy môn thành công!");
+        }
+
+        // ============================================================
+        // 9) GET SUBJECT LIST OF TEACHER
+        // ============================================================
+        [HttpGet("{teacherId}/subjects")]
+        public async Task<IActionResult> GetSubjectsOfTeacher(string teacherId)
+        {
+            var data = await _context.TeacherSubjects
+                .Where(ts => ts.TeacherId.Trim() == teacherId.Trim() && ts.Status == "Active")
+                .Include(ts => ts.Subject)
+                .Select(ts => new {
+                    SubjectId = ts.SubjectId.Trim(),
+                    SubjectName = ts.Subject.Name
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ============================================================
+        // 10) GET ALL CLASSES TAUGHT BY TEACHER
+        // ============================================================
+        [HttpGet("{teacherId}/classes")]
+        public async Task<IActionResult> GetClassesOfTeacher(string teacherId)
+        {
+            var data = await _context.Classes
+                .Where(c => c.TeacherId.Trim() == teacherId.Trim())
+                .Select(c => new {
+                    ClassId = c.ClassId.Trim(),
+                    c.ClassName,
+                    c.SemesterId,
+                    c.DayOfWeek,
+                    c.StartPeriod,
+                    c.EndPeriod,
+                    c.Room,
+                    c.Type,
+                    c.Status
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ============================================================
+        // 11) GET CURRENT TEACHING CLASSES
+        // ============================================================
+        [HttpGet("{teacherId}/classes/current")]
+        public async Task<IActionResult> GetCurrentClasses(string teacherId)
+        {
+            var data = await _context.Classes
+                .Where(c => c.TeacherId.Trim() == teacherId.Trim() && c.Status == "Open")
+                .Select(c => new {
+                    ClassId = c.ClassId.Trim(),
+                    c.ClassName,
+                    c.Room,
+                    c.DayOfWeek,
+                    c.StartPeriod,
+                    c.EndPeriod
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ============================================================
+        // 12) GET TEACHING HISTORY (closed / finished)
+        // ============================================================
+        [HttpGet("{teacherId}/classes/history")]
+        public async Task<IActionResult> GetTeachingHistory(string teacherId)
+        {
+            var data = await _context.Classes
+                .Where(c => c.TeacherId.Trim() == teacherId.Trim() && c.Status != "Open")
+                .Select(c => new {
+                    ClassId = c.ClassId.Trim(),
+                    c.ClassName,
+                    c.SemesterId,
+                    c.Type,
+                    c.Status
+                })
+                .ToListAsync();
+
+            return Ok(data);
+        }
+
+        // ============================================================
+        // 13) WEEKLY TEACHING SCHEDULE
+        // ============================================================
+        [HttpGet("{teacherId}/schedule")]
+        public async Task<IActionResult> GetWeeklySchedule(string teacherId)
+        {
+            var data = await _context.Classes
+                .Where(c => c.TeacherId.Trim() == teacherId.Trim() && c.Status == "Open")
+                .OrderBy(c => c.DayOfWeek)
+                .ThenBy(c => c.StartPeriod)
+                .Select(c => new {
+                    c.DayOfWeek,
+                    ClassId = c.ClassId.Trim(),
+                    c.ClassName,
+                    c.Room,
+                    Time = $"{c.StartPeriod} - {c.EndPeriod}"
+                })
+                .ToListAsync();
+
+            return Ok(data);
         }
     }
 }

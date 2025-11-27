@@ -7,6 +7,7 @@
             public string? Name { get; set; }
             public int? SoTc { get; set; }
             public int? CurriculumTerm { get; set; }
+        public string Status {  get; set; }
         
 
     }

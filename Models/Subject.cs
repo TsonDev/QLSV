@@ -18,4 +18,6 @@ public partial class Subject
     public string Status { get; set; } = null!;
 
     public virtual ICollection<StudentSubject> StudentSubjects { get; set; } = new List<StudentSubject>();
+
+    public virtual ICollection<TeacherSubject> TeacherSubjects { get; set; } = new List<TeacherSubject>();
 }

@@ -33,6 +33,8 @@ public partial class QlsvContext : DbContext
 
     public virtual DbSet<Teacher> Teachers { get; set; }
 
+    public virtual DbSet<TeacherSubject> TeacherSubjects { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -51,7 +53,7 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(10)
                 .IsFixedLength();
             entity.Property(e => e.Password)
-                .HasMaxLength(30)
+                .HasMaxLength(255)
                 .IsFixedLength();
             entity.Property(e => e.Role)
                 .HasMaxLength(10)
@@ -103,10 +105,19 @@ public partial class QlsvContext : DbContext
             entity.ToTable("Class");
 
             entity.Property(e => e.Id).HasColumnName("ID");
+            entity.Property(e => e.ClassId)
+                .HasMaxLength(30)
+                .IsUnicode(false)
+                .IsFixedLength();
             entity.Property(e => e.ClassName).HasMaxLength(100);
+            entity.Property(e => e.CurrentStudents).HasDefaultValue(0);
             entity.Property(e => e.DateCreate)
                 .HasDefaultValueSql("(getdate())")
                 .HasColumnName("Date_Create");
+            entity.Property(e => e.MaxStudents).HasDefaultValue(50);
+            entity.Property(e => e.Note).HasMaxLength(255);
+            entity.Property(e => e.Room).HasMaxLength(50);
+            entity.Property(e => e.Schedule).HasMaxLength(50);
             entity.Property(e => e.SemesterId)
                 .HasMaxLength(10)
                 .IsFixedLength()
@@ -123,6 +134,7 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(30)
                 .IsFixedLength()
                 .HasColumnName("TeacherID");
+            entity.Property(e => e.Type).HasMaxLength(20);
         });
 
         modelBuilder.Entity<Conduct>(entity =>
@@ -204,6 +216,9 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(30)
                 .IsFixedLength()
                 .HasColumnName("StudentID");
+            entity.Property(e => e.AcademicStatus)
+                .HasMaxLength(20)
+                .HasDefaultValue("Studying");
             entity.Property(e => e.AdvisorId)
                 .HasMaxLength(30)
                 .IsFixedLength()
@@ -243,6 +258,8 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(10)
                 .IsFixedLength()
                 .HasColumnName("SemesterID");
+            entity.Property(e => e.ApprovedAt).HasColumnType("datetime");
+            entity.Property(e => e.ApprovedBy).HasMaxLength(30);
             entity.Property(e => e.ClassId).HasColumnName("ClassID");
             entity.Property(e => e.Point1).HasColumnName("Point_1");
             entity.Property(e => e.Point2).HasColumnName("Point_2");
@@ -301,6 +318,33 @@ public partial class QlsvContext : DbContext
                 .HasMaxLength(10)
                 .IsFixedLength()
                 .HasColumnName("UserID");
+        });
+
+        modelBuilder.Entity<TeacherSubject>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PK__TeacherS__3214EC07CDE52087");
+
+            entity.ToTable("TeacherSubject");
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(30)
+                .IsFixedLength();
+            entity.Property(e => e.SubjectId)
+                .HasMaxLength(10)
+                .IsFixedLength();
+            entity.Property(e => e.TeacherId)
+                .HasMaxLength(30)
+                .IsFixedLength();
+
+            entity.HasOne(d => d.Subject).WithMany(p => p.TeacherSubjects)
+                .HasForeignKey(d => d.SubjectId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_TeacherSubject_Subject");
+
+            entity.HasOne(d => d.Teacher).WithMany(p => p.TeacherSubjects)
+                .HasForeignKey(d => d.TeacherId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_TeacherSubject_Teacher");
         });
 
         modelBuilder.Entity<User>(entity =>

@@ -10,4 +10,7 @@ public partial class Teacher
     public string? UserId { get; set; }
 
     public string Status { get; set; } = null!;
+
+    public virtual ICollection<TeacherSubject> TeacherSubjects { get; set; } = new List<TeacherSubject>();
+    public virtual User? User { set; get; }
 }
