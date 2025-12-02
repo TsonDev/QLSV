@@ -16,4 +16,5 @@ public partial class Semester
     public virtual ICollection<Gpa> Gpas { get; set; } = new List<Gpa>();
 
     public virtual ICollection<StudentSubject> StudentSubjects { get; set; } = new List<StudentSubject>();
+   
 }

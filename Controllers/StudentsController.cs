@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;  // ⭐ THÊM
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +14,7 @@ namespace QLSV_V1.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]    // ⭐ yêu cầu JWT cho toàn controller
     public class StudentsController : ControllerBase
     {
         private readonly QlsvContext _context;
@@ -26,6 +28,7 @@ namespace QLSV_V1.Controllers
         // LIST BASIC
         // -------------------------
         [HttpGet("list-basic")]
+        [AllowAnonymous] // ⭐ cho phép không cần token
         public async Task<IActionResult> GetStudentsBasic()
         {
             var data = await _context.Students
@@ -48,6 +51,7 @@ namespace QLSV_V1.Controllers
         // DETAIL
         // -------------------------
         [HttpGet("{id}/detail")]
+        [AllowAnonymous]  // ⭐ cho phép public
         public async Task<IActionResult> GetStudentDetail(string id)
         {
             if (string.IsNullOrWhiteSpace(id)) return BadRequest("Id required.");
@@ -83,9 +87,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // EXPORT (existing) - keep but trim values
+        // EXPORT
         // -------------------------
         [HttpGet("export")]
+        [Authorize(Roles = "Admin")] // ⭐ Admin-only
         public async Task<IActionResult> ExportStudents()
         {
             var students = await _context.Students
@@ -130,9 +135,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // UPDATE Student (basic) - keep but ensure trim when find
+        // UPDATE Student
         // -------------------------
         [HttpPut("{id}")]
+        [Authorize(Roles = "Admin,Teacher")] // ⭐ Admin + Teacher
         public async Task<IActionResult> PutStudent(string id, StudentUpdateDto dto)
         {
             var student = await _context.Students
@@ -158,29 +164,26 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // CREATE STUDENT (when user exists) - existing
+        // CREATE STUDENT
         // -------------------------
         [HttpPost]
+        [Authorize(Roles = "Admin")]  // ⭐ Chỉ Admin
         public async Task<IActionResult> PostStudent(StudentCreateDto dto)
         {
-            // 1. Check User tồn tại
             var userExists = await _context.Users.AnyAsync(u => u.Id == dto.UserId);
             if (!userExists)
                 return BadRequest(new { message = $"UserId {dto.UserId} không tồn tại." });
 
-            // 2. Check Advisor tồn tại
             var advisorExists = !string.IsNullOrWhiteSpace(dto.AdvisorId)
                 ? await _context.Advisors.AnyAsync(a => a.AdvisorId.Trim() == dto.AdvisorId.Trim())
                 : true;
             if (!advisorExists)
                 return BadRequest(new { message = $"AdvisorId {dto.AdvisorId} không tồn tại." });
 
-            // 3. Check User đã có Student chưa
             var studentExists = await _context.Students.AnyAsync(s => s.UserId == dto.UserId);
             if (studentExists)
                 return BadRequest(new { message = $"UserId {dto.UserId} đã được gán Student." });
 
-            // 4. Sinh StudentId tự động
             string newStudentId = (await GenerateStudentId()).PadRight(30);
 
             var student = new Student
@@ -194,7 +197,6 @@ namespace QLSV_V1.Controllers
             _context.Students.Add(student);
             await _context.SaveChangesAsync();
 
-            // 5. Trả về dạng JSON gọn đẹp
             var response = await _context.Students
                 .Include(s => s.User)
                 .Include(s => s.Advisor).ThenInclude(a => a.User)
@@ -212,46 +214,29 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // CREATE FULL: Account + User + Student (Admin use)
+        // CREATE FULL
         // -------------------------
-        public class StudentCreateFullDto
-        {
-            public string Name { get; set; }
-            public string Email { get; set; }
-            public string? PhoneNumber { get; set; }
-            public DateOnly? Birthday { get; set; }
-            public string? AdvisorId { get; set; }
-            public bool CreateAccount { get; set; } = true;
-            public string? Username { get; set; }    // optional: if not provided we generate from user id
-            public string? Password { get; set; }    // optional: default "ChangeMe123"
-        }
-
         [HttpPost("create-full")]
+        [Authorize(Roles = "Admin")]  // ⭐ Admin only
         public async Task<IActionResult> CreateStudentFull([FromBody] StudentCreateFullDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Email))
                 return BadRequest("Name and Email are required.");
 
-            // 1. Validate advisor (optional)
             if (!string.IsNullOrWhiteSpace(dto.AdvisorId))
             {
                 if (!await _context.Advisors.AnyAsync(a => a.AdvisorId.Trim() == dto.AdvisorId.Trim()))
                     return BadRequest($"AdvisorId {dto.AdvisorId} không tồn tại.");
             }
 
-            // 2. Create Account if requested
             string accId = null;
             string userId = "usr-" + Guid.NewGuid().ToString("N")[..6];
 
             if (dto.CreateAccount)
             {
                 string username = dto.Username;
-                if (string.IsNullOrWhiteSpace(username))
-                {
-                    // use userId as username
-                    username = userId;
-                }
-                // ensure username unique
+                if (string.IsNullOrWhiteSpace(username)) username = userId;
+
                 if (await _context.Accounts.AnyAsync(a => a.Username == username))
                     return BadRequest($"Username {username} đã tồn tại.");
 
@@ -265,25 +250,25 @@ namespace QLSV_V1.Controllers
                     DateCreate = DateOnly.FromDateTime(DateTime.Now),
                     CreateBy = "Admin"
                 };
+
                 _context.Accounts.Add(account);
                 await _context.SaveChangesAsync();
                 accId = account.AccId;
             }
 
-            // 3. Create User
             var user = new User
             {
                 Id = userId,
                 Name = dto.Name,
                 Email = dto.Email,
-                PhoneNumber = int.Parse( dto.PhoneNumber),
+                PhoneNumber = int.Parse(dto.PhoneNumber),
                 Birthday = dto.Birthday,
                 AccId = accId
             };
             _context.Users.Add(user);
 
-            // 4. Create Student
             string studentId = (await GenerateStudentId()).PadRight(30);
+
             var student = new Student
             {
                 StudentId = studentId,
@@ -291,8 +276,8 @@ namespace QLSV_V1.Controllers
                 AdvisorId = dto.AdvisorId,
                 Status = "Active"
             };
-            _context.Students.Add(student);
 
+            _context.Students.Add(student);
             await _context.SaveChangesAsync();
 
             return Ok(new
@@ -304,20 +289,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // UPDATE USER INFO for a student (name/email/phone/birthday/address)
+        // UPDATE Student INFO
         // -------------------------
-        public class StudentUpdateInfoDto
-        {
-            public string? Name { get; set; }
-            public string? Email { get; set; }
-            public int? PhoneNumber { get; set; }
-            public DateOnly? Birthday { get; set; }
-            public string? Province { get; set; } // example address field if you want
-            public string? AdvisorId { get; set; }
-            public string? Status { get; set; }
-        }
-
         [HttpPut("{id}/info")]
+        [Authorize(Roles = "Admin,Teacher")]  // ⭐ Admin + Teacher
         public async Task<IActionResult> UpdateStudentInfo(string id, [FromBody] StudentUpdateInfoDto dto)
         {
             var student = await _context.Students
@@ -349,9 +324,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // SOFT DELETE student
+        // SOFT DELETE
         // -------------------------
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin")]  // ⭐ Admin Only
         public async Task<IActionResult> SoftDeleteStudent(string id)
         {
             var student = await _context.Students.FirstOrDefaultAsync(s => s.StudentId.Trim() == id.Trim());
@@ -363,16 +339,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // IMPORT improved: return per-row result (do not stop whole file)
+        // IMPORT
         // -------------------------
-        public class ImportResult
-        {
-            public int Row { get; set; }
-            public bool Success { get; set; }
-            public string Message { get; set; }
-        }
-
         [HttpPost("import")]
+        [Authorize(Roles = "Admin")] // ⭐ Admin Only
         public async Task<IActionResult> ImportStudents(IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -392,7 +362,6 @@ namespace QLSV_V1.Controllers
             {
                 try
                 {
-                    // ==== LẤY DỮ LIỆU AN TOÀN ====
                     string excelStudentId = ws.Cell(row, 1).GetString().Trim();
                     string name = ws.Cell(row, 2).GetString().Trim();
                     string email = ws.Cell(row, 3).GetString().Trim();
@@ -403,7 +372,6 @@ namespace QLSV_V1.Controllers
                     string password = ws.Cell(row, 8).GetString().Trim();
                     string status = ws.Cell(row, 9).GetString().Trim();
 
-                    // normalize
                     if (string.IsNullOrWhiteSpace(name)) name = null;
                     if (string.IsNullOrWhiteSpace(email)) email = null;
                     if (string.IsNullOrWhiteSpace(status)) status = "Active";
@@ -417,14 +385,12 @@ namespace QLSV_V1.Controllers
                     else if (DateTime.TryParse(bCell.GetString(), out var bd))
                         birthday = DateOnly.FromDateTime(bd);
 
-                    // advisor validate
                     if (!string.IsNullOrWhiteSpace(advisorId) &&
                         !await _context.Advisors.AnyAsync(a => a.AdvisorId.Trim() == advisorId.Trim()))
                     {
                         advisorId = null;
                     }
 
-                    // username validate
                     if (string.IsNullOrWhiteSpace(username) ||
                         await _context.Accounts.AnyAsync(a => a.Username == username))
                         username = null;
@@ -432,7 +398,6 @@ namespace QLSV_V1.Controllers
                     if (string.IsNullOrWhiteSpace(password))
                         password = "ChangeMe123";
 
-                    // create account if username given
                     string accId = null;
                     if (!string.IsNullOrWhiteSpace(username))
                     {
@@ -449,7 +414,6 @@ namespace QLSV_V1.Controllers
                         accId = account.AccId;
                     }
 
-                    // create user
                     string newUserId = "usr-" + Guid.NewGuid().ToString("N")[..6];
                     var user = new User
                     {
@@ -461,9 +425,8 @@ namespace QLSV_V1.Controllers
                         AccId = accId
                     };
                     _context.Users.Add(user);
-                    await _context.SaveChangesAsync(); // ensure user persisted (optional)
+                    await _context.SaveChangesAsync();
 
-                    // student id
                     string finalStudentId;
                     if (!string.IsNullOrWhiteSpace(excelStudentId))
                     {
@@ -479,6 +442,7 @@ namespace QLSV_V1.Controllers
                     {
                         finalStudentId = await GenerateStudentId();
                     }
+
                     finalStudentId = finalStudentId.PadRight(30);
 
                     var student = new Student
@@ -488,6 +452,7 @@ namespace QLSV_V1.Controllers
                         AdvisorId = string.IsNullOrWhiteSpace(advisorId) ? null : advisorId,
                         Status = status
                     };
+
                     _context.Students.Add(student);
                     await _context.SaveChangesAsync();
 
@@ -505,42 +470,18 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // Get classes of a student
-        // -------------------------
-     /*   [HttpGet("{id}/classes")]
-        public async Task<IActionResult> GetStudentClasses(string id)
-        {
-            if (string.IsNullOrWhiteSpace(id)) return BadRequest("Id required.");
-
-            var classes = await _context.StudentSubjects
-                .Where(ss => ss.StudentId.Trim() == id.Trim())
-                .Include(ss => ss.Class)
-                    .ThenInclude(c => c.Subject)
-                .Include(ss => ss.Class)
-                    .ThenInclude(c => c.Teacher).ThenInclude(t => t.User)
-                .Select(ss => new {
-                    ss.Class.ClassId,
-                    ClassName = ss.Class.ClassName.Trim(),
-                    SubjectId = ss.Class.SubjectId.Trim(),
-                    SubjectName = ss.Class.Subject != null ? ss.Class.Subject.Name.Trim() : null,
-                    TeacherId = ss.Class.TeacherId?.Trim(),
-                    TeacherName = ss.Class.Teacher != null && ss.Class.Teacher.User != null ? ss.Class.Teacher.User.Name.Trim() : null,
-                    SemesterId = ss.Class.SemesterId?.Trim(),
-                    Score = ss.Score, // if you store score in StudentSubject
-                    Status = ss.Status
-                })
-                .ToListAsync();
-
-            return Ok(classes);
-        }*/
-
-        // -------------------------
         // SEARCH / FILTER
         // -------------------------
         [HttpGet("search")]
-        public async Task<IActionResult> SearchStudents([FromQuery] string? name, [FromQuery] string? advisorId,
-            [FromQuery] string? subjectId, [FromQuery] string? semesterId, [FromQuery] string? status,
-            [FromQuery] int page = 1, [FromQuery] int pageSize = 50)
+        [Authorize(Roles = "Admin,Teacher")]  // ⭐ Admin + Teacher
+        public async Task<IActionResult> SearchStudents(
+            [FromQuery] string? name,
+            [FromQuery] string? advisorId,
+            [FromQuery] string? subjectId,
+            [FromQuery] string? semesterId,
+            [FromQuery] string? status,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 50)
         {
             var q = _context.Students
                 .Include(s => s.User)
@@ -557,14 +498,10 @@ namespace QLSV_V1.Controllers
                 q = q.Where(s => s.User != null && EF.Functions.Like(s.User.Name, $"%{name}%"));
 
             if (!string.IsNullOrWhiteSpace(subjectId))
-            {
                 q = q.Where(s => s.StudentSubjects.Any(ss => ss.SubjectId.Trim() == subjectId.Trim()));
-            }
 
             if (!string.IsNullOrWhiteSpace(semesterId))
-            {
                 q = q.Where(s => s.StudentSubjects.Any(ss => ss.Class != null && ss.Class.SemesterId.Trim() == semesterId.Trim()));
-            }
 
             var total = await q.CountAsync();
 
@@ -572,7 +509,8 @@ namespace QLSV_V1.Controllers
                 .OrderBy(s => s.StudentId)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(s => new {
+                .Select(s => new
+                {
                     StudentId = s.StudentId.Trim(),
                     Name = s.User != null ? s.User.Name.Trim() : null,
                     Email = s.User != null ? s.User.Email.Trim() : null,
@@ -588,12 +526,14 @@ namespace QLSV_V1.Controllers
         // Get by academic status
         // -------------------------
         [HttpGet("by-status/{status}")]
+        [Authorize(Roles = "Admin,Teacher")] // ⭐ Admin + Teacher
         public async Task<IActionResult> GetByAcademicStatus(string status)
         {
             var items = await _context.Students
                 .Where(s => s.AcademicStatus == status)
                 .Include(s => s.User)
-                .Select(s => new {
+                .Select(s => new
+                {
                     StudentId = s.StudentId.Trim(),
                     Name = s.User != null ? s.User.Name.Trim() : null,
                     Email = s.User != null ? s.User.Email.Trim() : null,
@@ -604,20 +544,20 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // Update AcademicStatus batch (default subject IT6129)
+        // Update AcademicStatus batch
         // -------------------------
         [HttpPut("update-academic-status")]
+        [Authorize(Roles = "Admin")] // ⭐ Admin Only
         public async Task<IActionResult> UpdateAcademicStatus([FromQuery] string subjectId = "IT6129")
         {
-            // 1. students who passed subject -> Graduated
             var passedStudentIds = await _context.StudentSubjects
                 .Where(ss => ss.SubjectId.Trim() == subjectId.Trim() && ss.Status.Trim() == "Passed")
                 .Select(ss => ss.StudentId.Trim())
                 .Distinct()
                 .ToListAsync();
 
-            // Update graduated
             var students = await _context.Students.ToListAsync();
+
             foreach (var s in students)
             {
                 s.AcademicStatus = passedStudentIds.Contains(s.StudentId.Trim()) ? "Graduated" : "Studying";
@@ -628,9 +568,10 @@ namespace QLSV_V1.Controllers
         }
 
         // -------------------------
-        // Restore (already present) - keep
+        // Restore student
         // -------------------------
         [HttpPut("restore/{id}")]
+        [Authorize(Roles = "Admin")] // ⭐ Admin Only
         public async Task<IActionResult> RestoreStudent(string id)
         {
             var student = await _context.Students.FindAsync(id);

@@ -89,6 +89,52 @@ namespace QLSV_V1.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+        //[HttpGet("user-detail/{accountId}")]
+        //public async Task<IActionResult> GetUserDetailByAccountId(string accountId)
+        //{
+        //    var acc = await _context.Accounts
+        //        .Where(a => a.AccId.Trim() == accountId.Trim())
+        //        .Include(a => a.Users)
+        //            .ThenInclude(u => u.Students)   // thông tin sinh viên
+        //        .Include(a => a.Users)
+        //            .ThenInclude(u => u.Teacher)   // thông tin giảng viên
+        //        .FirstOrDefaultAsync();
+
+        //    if (acc == null)
+        //        return NotFound("Account không tồn tại.");
+
+        //    return Ok(new
+        //    {
+        //        AccountId = acc.AccId.Trim(),
+        //        Username = acc.Username.Trim(),
+        //        Email = acc.ema.Trim(),
+        //        Role = acc.Role.Trim(),
+        //        Status = acc.Status.Trim(),
+
+        //        User = new
+        //        {
+        //            UserId = acc.User.UserId.Trim(),
+        //            Name = acc.User.Name.Trim(),
+        //            Phone = acc.User.Phone?.Trim(),
+        //            Gender = acc.User.Gender?.Trim(),
+        //            Address = acc.User.Address?.Trim(),
+        //            Birthday = acc.User.Birthday,
+
+        //            Student = acc.User.Student == null ? null : new
+        //            {
+        //                StudentId = acc.User.Student.StudentId.Trim(),
+        //                MajorId = acc.User.Student.MajorId.Trim(),
+        //                Course = acc.User.Student.Course
+        //            },
+
+        //            Teacher = acc.User.Teacher == null ? null : new
+        //            {
+        //                TeacherId = acc.User.Teacher.TeacherId.Trim(),
+        //                Department = acc.User.Teacher.Department?.Trim()
+        //            }
+        //        }
+        //    });
+        //}
 
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(UserCreateDto dto)

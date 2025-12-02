@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
+using Microsoft.AspNetCore.Authorization;
 
 namespace QLSV_V1.Controllers
 {
@@ -16,8 +17,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 1) GET LIST (JOIN USER) — ACTIVE ONLY
+        // 1) GET LIST (JOIN USER) — ACTIVE ONLY — ADMIN ONLY
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetAdvisors()
         {
@@ -36,8 +38,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 2) GET DETAIL (JOIN USER)
+        // 2) GET DETAIL (JOIN USER) — ADMIN ONLY
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAdvisor(string id)
         {
@@ -64,16 +67,15 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 3) CREATE ADVISOR
+        // 3) CREATE ADVISOR — ADMIN
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public async Task<IActionResult> PostAdvisor(AdvisorCreateDto dto)
         {
-            // Validate UserId
             if (!await _context.Users.AnyAsync(u => u.Id == dto.UserId))
                 return BadRequest($"UserId {dto.UserId} không tồn tại.");
 
-            // Generate ID Adv-00001
             var last = await _context.Advisors
                 .OrderByDescending(a => a.AdvisorId)
                 .FirstOrDefaultAsync();
@@ -98,8 +100,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 4) UPDATE (FULL)
+        // 4) UPDATE FULL — ADMIN
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpPut("full/{id}")]
         public async Task<IActionResult> UpdateAdvisorFull(string id, AdvisorUpdateDto dto)
         {
@@ -110,7 +113,6 @@ namespace QLSV_V1.Controllers
             if (advisor == null)
                 return NotFound("Advisor không tồn tại.");
 
-            // =========== UPDATE USER ===========
             if (advisor.User != null)
             {
                 if (!string.IsNullOrWhiteSpace(dto.Name))
@@ -126,7 +128,6 @@ namespace QLSV_V1.Controllers
                     advisor.User.Birthday = dto.Birthday;
             }
 
-            // =========== UPDATE ADVISOR ===========
             if (!string.IsNullOrWhiteSpace(dto.Status))
                 advisor.Status = dto.Status;
 
@@ -136,8 +137,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 5) SOFT DELETE
+        // 5) SOFT DELETE — ADMIN
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAdvisor(string id)
         {
@@ -154,8 +156,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 6) RESTORE
+        // 6) RESTORE — ADMIN
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpPut("restore/{id}")]
         public async Task<IActionResult> RestoreAdvisor(string id)
         {
@@ -172,8 +175,9 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 7) ASSIGN ADVISOR TO STUDENT
+        // 7) ASSIGN ADVISOR TO STUDENT — ADMIN
         // =====================================================================
+        [Authorize(Roles = "Admin")]
         [HttpPost("assign-student")]
         public async Task<IActionResult> AssignAdvisorToStudent(AssignAdvisorDto dto)
         {
@@ -197,8 +201,42 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================================
-        // 8) GET STUDENTS OF ADVISOR
+        // 7.1 SELF-UPDATE — ADVISOR
         // =====================================================================
+        [Authorize(Roles = "Advisor")]
+        [HttpPut("self-update")]
+        public async Task<IActionResult> AdvisorSelfUpdate([FromBody] AdvisorSelfUpdateDto dto)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Id.Trim() == dto.AccId.Trim());
+
+            if (user == null)
+                return NotFound("Không tìm thấy advisor.");
+
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                user.Name = dto.Name;
+
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+                user.Email = dto.Email;
+
+            if (dto.PhoneNumber.HasValue)
+                user.PhoneNumber = dto.PhoneNumber;
+
+            if (dto.Birthday.HasValue)
+                user.Birthday = dto.Birthday;
+
+            if (!string.IsNullOrWhiteSpace(dto.Gender))
+                user.Gender = dto.Gender;
+
+            await _context.SaveChangesAsync();
+
+            return Ok("Cập nhật thông tin thành công!");
+        }
+
+        // =====================================================================
+        // 8) GET STUDENTS OF ADVISOR — ADVISOR
+        // =====================================================================
+        [Authorize(Roles = "Advisor")]
         [HttpGet("{advisorId}/students")]
         public async Task<IActionResult> GetStudentsOfAdvisor(string advisorId)
         {
@@ -211,13 +249,11 @@ namespace QLSV_V1.Controllers
                     Email = s.User != null ? s.User.Email : null,
                     PhoneNumber = s.User != null ? s.User.PhoneNumber : null,
                     Gender = s.User != null ? s.User.Gender : null,
-                    Birthday = s.User != null ? s.User.Birthday : null,
-                    
+                    Birthday = s.User != null ? s.User.Birthday : null
                 })
                 .ToListAsync();
 
             return Ok(students);
         }
-
     }
 }

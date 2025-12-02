@@ -133,6 +133,34 @@ namespace QLSV_V1.Controllers
 
             return Ok(new { message = "Cập nhật giảng viên thành công!" });
         }
+        [HttpPut("self-update")]
+        public async Task<IActionResult> UpdateTeacherSelf(TeacherSelfUpdateDto dto)
+        {
+            // dto.AccId lấy từ token hoặc FE gửi lên
+            var user = await _context.Users
+                .Include(u => u.Teacher)
+                .FirstOrDefaultAsync(u => u.Id.Trim() == dto.AccId.Trim());
+
+            if (user == null)
+                return NotFound("Không tìm thấy tài khoản.");
+
+            // Cập nhật User
+            if (!string.IsNullOrWhiteSpace(dto.Name))
+                user.Name = dto.Name;
+
+            if (!string.IsNullOrWhiteSpace(dto.Email))
+                user.Email = dto.Email;
+
+            if (dto.PhoneNumber != null)
+                user.PhoneNumber = dto.PhoneNumber;
+
+            if (dto.Birthday != null)
+                user.Birthday = dto.Birthday;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật thông tin thành công!" });
+        }
 
 
         // ============================================================

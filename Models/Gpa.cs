@@ -18,4 +18,5 @@ public partial class Gpa
     public virtual Semester? Semester { get; set; }
 
     public virtual Student? Student { get; set; }
+    public virtual User? User { get; set; }
 }

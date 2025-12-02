@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -6,6 +7,7 @@ namespace QLSV_V1.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize]  
     public class ClassesController : ControllerBase
     {
         private readonly QlsvContext _context;
@@ -15,7 +17,11 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
+        // =====================================================
+        // GET ALL CLASSES (Public)
+        // =====================================================
         [HttpGet]
+        [AllowAnonymous]  
         public async Task<IActionResult> GetClasses()
         {
             var data = await _context.Classes
@@ -52,11 +58,11 @@ namespace QLSV_V1.Controllers
             return Ok(data);
         }
 
-
         // =====================================================
-        // GET DETAIL
+        // GET DETAIL (Public)
         // =====================================================
         [HttpGet("{classId}")]
+        [AllowAnonymous] 
         public async Task<IActionResult> GetClass(string classId)
         {
             var c = await _context.Classes
@@ -84,24 +90,21 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================
-        // CREATE CLASS
+        // CREATE CLASS  (Admin / Teacher)
         // =====================================================
         [HttpPost("create")]
+        [Authorize(Roles = "Admin,Teacher")]
         public async Task<IActionResult> CreateClass(ClassCreateDto dto)
         {
-            // 1. Check subject
             if (!await _context.Subjects.AnyAsync(s => s.Id == dto.SubjectId))
                 return BadRequest("Subject không tồn tại.");
 
-            // 2. Check teacher
             if (!await _context.Teachers.AnyAsync(t => t.TeacherId == dto.TeacherId))
                 return BadRequest("Teacher không tồn tại.");
 
-            // 3. Check schedule conflict
             if (await IsTeacherScheduleConflict(dto.TeacherId, dto.DayOfWeek, dto.StartPeriod, dto.EndPeriod))
                 return BadRequest("Giáo viên bị trùng lịch.");
 
-            // 4. Generate ClassId
             var last = await _context.Classes
                 .OrderByDescending(c => c.ClassId)
                 .FirstOrDefaultAsync();
@@ -112,7 +115,6 @@ namespace QLSV_V1.Controllers
 
             string newClassId = $"CLS-{next:D5}".PadRight(30);
 
-            // 5. Create
             var entity = new Class
             {
                 ClassId = newClassId,
@@ -143,9 +145,58 @@ namespace QLSV_V1.Controllers
         }
 
         // =====================================================
-        // DELETE (SOFT)
+        // UPDATE CLASS  (Admin / Teacher)
+        // =====================================================
+        [HttpPut("update/{classId}")]
+        [Authorize(Roles = "Admin,Teacher")]
+        public async Task<IActionResult> UpdateClass(string classId, ClassUpdateDto dto)
+        {
+            var entity = await _context.Classes
+                .FirstOrDefaultAsync(c => c.ClassId.Trim() == classId.Trim());
+
+            if (entity == null)
+                return NotFound("Class không tồn tại.");
+
+            if (!await _context.Subjects.AnyAsync(s => s.Id == dto.SubjectId))
+                return BadRequest("Subject không tồn tại.");
+
+            if (!await _context.Teachers.AnyAsync(t => t.TeacherId == dto.TeacherId))
+                return BadRequest("Teacher không tồn tại.");
+
+            bool conflict = await _context.Classes.AnyAsync(c =>
+                c.TeacherId == dto.TeacherId &&
+                c.DayOfWeek == dto.DayOfWeek &&
+                c.StartPeriod <= dto.EndPeriod &&
+                c.EndPeriod >= dto.StartPeriod &&
+                c.ClassId != entity.ClassId &&
+                c.Status == "Open"
+            );
+
+            if (conflict)
+                return BadRequest("Giáo viên bị trùng lịch.");
+
+            entity.ClassName = dto.ClassName;
+            entity.SubjectId = dto.SubjectId;
+            entity.SemesterId = dto.SemesterId;
+            entity.TeacherId = dto.TeacherId;
+            entity.MaxStudents = dto.MaxStudents;
+            entity.DayOfWeek = dto.DayOfWeek;
+            entity.StartPeriod = dto.StartPeriod;
+            entity.EndPeriod = dto.EndPeriod;
+            entity.Room = dto.Room;
+            entity.Type = dto.Type;
+            entity.Note = dto.Note;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật lớp thành công!" });
+        }
+
+        // =====================================================
+        // SOFT DELETE  (Admin)
         // =====================================================
         [HttpDelete("soft/{classId}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> SoftDelete(string classId)
         {
             var c = await _context.Classes
@@ -158,11 +209,16 @@ namespace QLSV_V1.Controllers
             await _context.SaveChangesAsync();
             return NoContent();
         }
+
+        // =====================================================
+        // RESTORE (Admin)
+        // =====================================================
         [HttpPut("restore/{id}")]
+        [Authorize(Roles = "Admin")]
         public async Task<IActionResult> RestoreUser(string id)
         {
             var c = await _context.Classes.FindAsync(id);
-            if ( c == null) return NotFound();
+            if (c == null) return NotFound();
 
             c.Status = "Active";
             await _context.SaveChangesAsync();

@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -20,102 +15,100 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
-        // GET: api/Semesters
+        // ============================================================
+        // 1. GET ALL SEMESTERS
+        // ============================================================
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Semester>>> GetSemesters()
+        public async Task<IActionResult> GetAll()
         {
-            return await _context.Semesters.ToListAsync();
+            var data = await _context.Semesters
+                .Select(s => new
+                {
+                    SemesterId = s.SemesterId.Trim(),
+                    Name = s.Name!.Trim(),
+                    Year = s.Year!.Trim()
+                })
+                .ToListAsync();
+
+            return Ok(data);
         }
 
-        // GET: api/Semesters/5
+        // ============================================================
+        // 2. GET SEMESTER DETAIL
+        // ============================================================
         [HttpGet("{id}")]
-        public async Task<ActionResult<Semester>> GetSemester(string id)
+        public async Task<IActionResult> GetById(string id)
         {
-            var semester = await _context.Semesters.FindAsync(id);
+            var semester = await _context.Semesters
+                .FirstOrDefaultAsync(s => s.SemesterId.Trim() == id.Trim());
 
             if (semester == null)
-            {
-                return NotFound();
-            }
+                return NotFound("Không tìm thấy học kỳ.");
 
-            return semester;
+            return Ok(new
+            {
+                SemesterId = semester.SemesterId.Trim(),
+                Name = semester.Name?.Trim(),
+                Year = semester.Year?.Trim()
+            });
         }
 
-        // PUT: api/Semesters/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutSemester(string id, Semester semester)
-        {
-            if (id != semester.SemesterId)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(semester).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!SemesterExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
-        }
-
-        // POST: api/Semesters
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        // ============================================================
+        // 3. CREATE SEMESTER
+        // ============================================================
         [HttpPost]
-        public async Task<ActionResult<Semester>> PostSemester(Semester semester)
+        public async Task<IActionResult> Create(Semester dto)
         {
-            _context.Semesters.Add(semester);
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                if (SemesterExists(semester.SemesterId))
-                {
-                    return Conflict();
-                }
-                else
-                {
-                    throw;
-                }
-            }
+            // Kiểm tra trùng
+            if (await _context.Semesters.AnyAsync(s => s.SemesterId.Trim() == dto.SemesterId.Trim()))
+                return Conflict("SemesterId đã tồn tại.");
 
-            return CreatedAtAction("GetSemester", new { id = semester.SemesterId }, semester);
+            _context.Semesters.Add(dto);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Tạo học kỳ thành công.",
+                semesterId = dto.SemesterId.Trim()
+            });
         }
 
-        // DELETE: api/Semesters/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteSemester(string id)
+        // ============================================================
+        // 4. UPDATE SEMESTER
+        // ============================================================
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(string id, Semester dto)
         {
-            var semester = await _context.Semesters.FindAsync(id);
+            var semester = await _context.Semesters
+                .FirstOrDefaultAsync(s => s.SemesterId.Trim() == id.Trim());
+
             if (semester == null)
-            {
-                return NotFound();
-            }
+                return NotFound("Không tìm thấy học kỳ.");
+
+            semester.Name = dto.Name;
+            semester.Year = dto.Year;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật học kỳ thành công." });
+        }
+
+        // ============================================================
+        // 5. DELETE SEMESTER
+        // ============================================================
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(string id)
+        {
+            var semester = await _context.Semesters
+                .FirstOrDefaultAsync(s => s.SemesterId.Trim() == id.Trim());
+
+            if (semester == null)
+                return NotFound("Không tìm thấy học kỳ.");
 
             _context.Semesters.Remove(semester);
             await _context.SaveChangesAsync();
 
-            return NoContent();
-        }
-
-        private bool SemesterExists(string id)
-        {
-            return _context.Semesters.Any(e => e.SemesterId == id);
+            return Ok(new { message = "Xóa học kỳ thành công." });
         }
     }
 }

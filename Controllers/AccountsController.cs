@@ -1,5 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Text;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Authorization;
 using QLSV_V1.Models;
 
 namespace QLSV_V1.Controllers
@@ -9,15 +14,18 @@ namespace QLSV_V1.Controllers
     public class AccountsController : ControllerBase
     {
         private readonly QlsvContext _context;
+        private readonly IConfiguration _config;
 
-        public AccountsController(QlsvContext context)
+        public AccountsController(QlsvContext context, IConfiguration config)
         {
             _context = context;
+            _config = config;
         }
 
         // ============================
         // GET ALL ACTIVE ACCOUNTS
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpGet]
         public async Task<IActionResult> GetAccounts()
         {
@@ -38,6 +46,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // GET DETAIL
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAccount(string id)
         {
@@ -54,13 +63,13 @@ namespace QLSV_V1.Controllers
         // ============================
         // CREATE ACCOUNT
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPost]
         public async Task<IActionResult> PostAccount(AccountCreateDto dto)
         {
             if (await _context.Accounts.AnyAsync(a => a.Username == dto.Username))
                 return BadRequest("Username đã tồn tại.");
 
-            // === KHÔNG DÙNG ID TĂNG SỐ NỮA ===
             string newId = $"acc-{Guid.NewGuid().ToString("N").Substring(0, 8)}";
 
             var acc = new Account
@@ -80,11 +89,10 @@ namespace QLSV_V1.Controllers
             return Ok(new { message = "Tạo tài khoản thành công!", id = newId });
         }
 
-
-
         // ============================
-        // UPDATE ACCOUNT (Không sửa password ở đây)
+        // UPDATE ACCOUNT
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPut("{id}")]
         public async Task<IActionResult> PutAccount(string id, AccountUpdateDto dto)
         {
@@ -107,6 +115,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // RESET PASSWORD
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPut("reset-password/{id}")]
         public async Task<IActionResult> ResetPassword(string id, [FromBody] AccountActionDto dto)
         {
@@ -122,6 +131,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // UPDATE ROLE
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPut("update-role/{id}")]
         public async Task<IActionResult> UpdateRole(string id, [FromBody] AccountActionDto dto)
         {
@@ -137,6 +147,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // LOCK ACCOUNT
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPut("lock/{id}")]
         public async Task<IActionResult> LockAccount(string id)
         {
@@ -151,6 +162,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // UNLOCK ACCOUNT
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpPut("unlock/{id}")]
         public async Task<IActionResult> UnlockAccount(string id)
         {
@@ -165,6 +177,7 @@ namespace QLSV_V1.Controllers
         // ============================
         // SOFT DELETE
         // ============================
+        [Authorize(Roles = "Admin")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteAccount(string id)
         {
@@ -175,6 +188,51 @@ namespace QLSV_V1.Controllers
             await _context.SaveChangesAsync();
 
             return Ok("Đã xóa tài khoản.");
+        }
+
+        // ============================
+        // LOGIN (KHÔNG CẦN JWT)
+        // ============================
+        [HttpPost("login")]
+        public async Task<IActionResult> Login(LoginDto dto)
+        {
+            var acc = await _context.Accounts
+                .FirstOrDefaultAsync(a => a.Username == dto.Username);
+
+            if (acc == null)
+                return BadRequest("Sai tài khoản.");
+
+            
+            if (!BCrypt.Net.BCrypt.Verify(dto.Password.Trim(), acc.Password.Trim()))
+            {
+                // Nếu pass DB không phải bcrypt → fallback so sánh plain text
+                if (acc.Password.Trim() != dto.Password.Trim())
+                    return BadRequest("Sai mật khẩu.");
+            }
+
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, acc.AccId.Trim()),
+                new Claim(ClaimTypes.Role, acc.Role?.Trim() ?? "")
+            };
+
+            var key = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(_config["Jwt:Key"])
+            );
+
+            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+
+            var token = new JwtSecurityToken(
+                issuer: _config["Jwt:Issuer"],
+                audience: _config["Jwt:Audience"],
+                claims: claims,
+                expires: DateTime.UtcNow.AddHours(6),
+                signingCredentials: creds
+            );
+
+            string jwt = new JwtSecurityTokenHandler().WriteToken(token);
+
+            return Ok(new { token = jwt });
         }
     }
 }
