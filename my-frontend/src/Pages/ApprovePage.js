@@ -4,21 +4,25 @@ export default function ApprovePage() {
     const [classes, setClasses] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    // Nếu có JWT thì lấy token ở đây:
-    // const token = localStorage.getItem("token");
-
-    // Tạm thời không dùng JWT → admin nhập accId trực tiếp
-    const [adminAccId, setAdminAccId] = useState("Acc-00001");
+    // Lấy token từ localStorage
+    const token = localStorage.getItem("token");
 
     // ==========================
-    // 1) Load tất cả lớp và trạng thái
+    // 1) Load danh sách lớp
     // ==========================
     const loadData = async () => {
         setLoading(true);
 
-        const res = await fetch(
-            "https://localhost:7287/api/StudentSubjects/class/status"
-        );
+        const res = await fetch("https://localhost:7287/api/StudentSubjects/class/status", {
+            headers: {
+                "Authorization": `Bearer ${token}`
+            }
+        });
+
+        if (!res.ok) {
+            alert("Không thể tải dữ liệu. Token có thể hết hạn.");
+            return;
+        }
 
         const data = await res.json();
         setClasses(data);
@@ -30,29 +34,27 @@ export default function ApprovePage() {
     }, []);
 
     // ==========================
-    // 2) Duyệt lớp
+    // 2) Gửi yêu cầu DUYỆT LỚP
     // ==========================
     const approveClass = async (classId) => {
-        if (!adminAccId) {
-            alert("Chưa nhập accId của admin!");
-            return;
-        }
-
-        const confirm = window.confirm(
-            `Bạn có chắc muốn DUYỆT lớp ${classId} không?`
-        );
+        const confirm = window.confirm(`Bạn có chắc muốn DUYỆT lớp ${classId} không?`);
         if (!confirm) return;
 
         const res = await fetch(
-            `https://localhost:7287/api/StudentSubjects/class/${classId}/approve?accId=${adminAccId}`,
+            `https://localhost:7287/api/StudentSubjects/class/${classId}/approve`,
             {
                 method: "PUT",
                 headers: {
-                    // Nếu dùng JWT thì thêm:
-                    // Authorization: `Bearer ${token}`
-                },
+                    "Authorization": `Bearer ${token}`
+                }
             }
         );
+
+        if (!res.ok) {
+            const error = await res.text();
+            alert("Lỗi khi duyệt lớp: " + error);
+            return;
+        }
 
         const result = await res.json();
         alert(result.message);
@@ -60,27 +62,13 @@ export default function ApprovePage() {
         loadData();
     };
 
-    if (loading) return <div>Đang tải...</div>;
+    if (loading) return <div>Đang tải dữ liệu...</div>;
 
     return (
         <div style={{ padding: "20px" }}>
             <h2>Quản lý duyệt điểm</h2>
 
-            {/* Admin nhập accId (nếu chưa dùng JWT) */}
-            <div style={{ marginBottom: "20px" }}>
-                <label>Nhập accId Admin: </label>
-                <input
-                    value={adminAccId}
-                    onChange={(e) => setAdminAccId(e.target.value)}
-                    style={{
-                        padding: "5px 10px",
-                        marginLeft: "10px",
-                        borderRadius: "6px"
-                    }}
-                />
-            </div>
-
-            <table border="1" cellPadding="10" style={{ width: "100%" }}>
+            <table border="1" cellPadding="10" style={{ width: "100%", marginTop: "20px" }}>
                 <thead>
                     <tr>
                         <th>Mã lớp</th>
@@ -101,6 +89,7 @@ export default function ApprovePage() {
                             <td>{c.className}</td>
                             <td>{c.subjectId}</td>
                             <td>{c.totalRecords}</td>
+
                             <td>
                                 {c.isApproved ? (
                                     <span style={{ color: "green" }}>ĐÃ DUYỆT</span>
@@ -122,6 +111,7 @@ export default function ApprovePage() {
                                             color: "white",
                                             border: "none",
                                             borderRadius: "5px",
+                                            cursor: "pointer"
                                         }}
                                     >
                                         Duyệt điểm

@@ -7,7 +7,7 @@ namespace QLSV_V1.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize]   // 🔐 Yêu cầu JWT cho toàn bộ API thống kê
+    [Authorize]   
     public class StatisticsController : ControllerBase
     {
         private readonly QlsvContext _context;
@@ -118,7 +118,7 @@ namespace QLSV_V1.Controllers
         // 7. THỐNG KÊ GIẢNG VIÊN
         // ============================================================
         [HttpGet("teacher/{teacherId}")]
-        [Authorize(Roles = "Admin,Teacher")] // 👈 Giáo viên chỉ xem được thống kê của họ hoặc admin xem tất cả
+        [Authorize(Roles = "Admin,Teacher")] 
         public async Task<IActionResult> GetTeacherStatistics(string teacherId)
         {
             // Lớp đang dạy
@@ -152,5 +152,25 @@ namespace QLSV_V1.Controllers
                 failRate
             });
         }
+        [HttpGet("GetTop3Teachers")]
+        public async Task<IActionResult> GetTop3Teachers()
+        {
+            var result = await _context.StudentSubjects
+                .Include(ss => ss.Class)
+                .GroupBy(ss => ss.Class.TeacherId)
+                .Select(g => new
+                {
+                    TeacherId = g.Key,
+                    TotalClasses = g.Select(x => x.ClassId).Distinct().Count(),
+                    TotalStudents = g.Count(),
+                    PassRate = g.Count(x => x.PointTotal >= 4) * 100.0 / g.Count()
+                })
+                .OrderByDescending(x => x.PassRate)
+                .Take(3)
+                .ToListAsync();
+
+            return Ok(result);
+        }
+
     }
 }

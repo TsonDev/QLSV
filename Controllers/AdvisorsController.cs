@@ -1,7 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
-using Microsoft.AspNetCore.Authorization;
 
 namespace QLSV_V1.Controllers
 {
@@ -203,16 +204,24 @@ namespace QLSV_V1.Controllers
         // =====================================================================
         // 7.1 SELF-UPDATE — ADVISOR
         // =====================================================================
-        [Authorize(Roles = "Advisor")]
         [HttpPut("self-update")]
+        [Authorize(Roles = "Advisor")]
         public async Task<IActionResult> AdvisorSelfUpdate([FromBody] AdvisorSelfUpdateDto dto)
         {
+            // Lấy AccId từ token
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value?.Trim();
+            if (string.IsNullOrEmpty(accId))
+                return Unauthorized("Không lấy được accId từ token.");
+
+            // Tìm User theo AccId
             var user = await _context.Users
-                .FirstOrDefaultAsync(u => u.Id.Trim() == dto.AccId.Trim());
+                .Include(u => u.Advisor)
+                .FirstOrDefaultAsync(u => u.AccId.Trim() == accId);
 
             if (user == null)
                 return NotFound("Không tìm thấy advisor.");
 
+            // Cập nhật thông tin
             if (!string.IsNullOrWhiteSpace(dto.Name))
                 user.Name = dto.Name;
 
@@ -232,6 +241,7 @@ namespace QLSV_V1.Controllers
 
             return Ok("Cập nhật thông tin thành công!");
         }
+
 
         // =====================================================================
         // 8) GET STUDENTS OF ADVISOR — ADVISOR

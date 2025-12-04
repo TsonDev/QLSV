@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -136,10 +137,13 @@ namespace QLSV_V1.Controllers
         [HttpPut("self-update")]
         public async Task<IActionResult> UpdateTeacherSelf(TeacherSelfUpdateDto dto)
         {
-            // dto.AccId lấy từ token hoặc FE gửi lên
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value?.Trim();
+            if (string.IsNullOrEmpty(accId))
+                return Unauthorized("Không lấy được accId từ token.");
             var user = await _context.Users
-                .Include(u => u.Teacher)
-                .FirstOrDefaultAsync(u => u.Id.Trim() == dto.AccId.Trim());
+    .Include(u => u.Teacher)
+    .FirstOrDefaultAsync(u => u.AccId.Trim() == accId);
+
 
             if (user == null)
                 return NotFound("Không tìm thấy tài khoản.");

@@ -1,61 +1,97 @@
 ﻿import React from "react";
-import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
 import Home from "./Pages/Home";
 import Subjects from "./Pages/Subjects";
 import ScoreInputPageWrapper from "./Pages/ScoreInputPageWrapper";
 import ApprovePage from "./Pages/ApprovePage";
+import Login from "./Pages/Login";
 
 function App() {
+    const token = localStorage.getItem("token");
+
     return (
         <Router>
-            <nav
-                style={{
-                    backgroundColor: "#007bff",
-                    padding: "10px 0",
-                    marginBottom: "20px",
-                }}
-            >
-                <ul
+
+            {/* =============== MENU =============== */}
+            {token && (
+                <nav
                     style={{
-                        listStyle: "none",
-                        display: "flex",
-                        justifyContent: "center",
-                        gap: "20px",
-                        margin: 0,
-                        padding: 0,
+                        backgroundColor: "#007bff",
+                        padding: "10px 0",
+                        marginBottom: "20px",
                     }}
                 >
-                    <li>
-                        <Link to="/" style={{ color: "white", textDecoration: "none" }}>
-                            Trang chủ
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/subjects" style={{ color: "white", textDecoration: "none" }}>
-                            Môn học
-                        </Link>
-                    </li>
-                    <li>
-                        {/* Dùng link test với classId = 11 */}
-                        <Link to="/teacher/class/11" style={{ color: "white", textDecoration: "none" }}>
-                            Nhập điểm (test lớp 11)
-                        </Link>
-                    </li>
-                    <li>
-                        <Link to="/admin/approve" style={{ color: "white", textDecoration: "none" }}>
-                            Duyệt điểm
-                        </Link>
-                    </li>
+                    <ul
+                        style={{
+                            listStyle: "none",
+                            display: "flex",
+                            justifyContent: "center",
+                            gap: "20px",
+                            margin: 0,
+                            padding: 0,
+                        }}
+                    >
+                        <li>
+                            <Link to="/home" style={{ color: "white" }}>Trang chủ</Link>
+                        </li>
+                        <li>
+                            <Link to="/subjects" style={{ color: "white" }}>Môn học</Link>
+                        </li>
+                        <li>
+                            <Link to="/teacher/class/11" style={{ color: "white" }}>Nhập điểm</Link>
+                        </li>
+                        <li>
+                            <Link to="/admin/approve" style={{ color: "white" }}>Duyệt điểm</Link>
+                        </li>
+                        <li>
+                            <button
+                                onClick={() => {
+                                    localStorage.removeItem("token");
+                                    window.location.href = "/login";
+                                }}
+                                style={{
+                                    background: "red",
+                                    color: "white",
+                                    border: "none",
+                                    padding: "5px 10px",
+                                    borderRadius: "5px"
+                                }}
+                            >
+                                Đăng xuất
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            )}
 
-                </ul>
-            </nav>
-
+            {/* =============== ROUTES =============== */}
             <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/subjects" element={<Subjects />} />
-                <Route path="/teacher/class/:id" element={<ScoreInputPageWrapper />} />
-                <Route path="/admin/approve" element={<ApprovePage />} />
+                {/* Trang login */}
+                <Route path="/login" element={<Login />} />
 
+                {/* Khi vào "/", chuyển qua login luôn */}
+                <Route path="/" element={<Navigate to="/login" />} />
+
+                {/* Sau khi login → vào trang home */}
+                <Route
+                    path="/home"
+                    element={token ? <Home /> : <Navigate to="/login" />}
+                />
+
+                <Route
+                    path="/subjects"
+                    element={token ? <Subjects /> : <Navigate to="/login" />}
+                />
+
+                <Route
+                    path="/teacher/class/:id"
+                    element={token ? <ScoreInputPageWrapper /> : <Navigate to="/login" />}
+                />
+
+                <Route
+                    path="/admin/approve"
+                    element={token ? <ApprovePage /> : <Navigate to="/login" />}
+                />
             </Routes>
         </Router>
     );

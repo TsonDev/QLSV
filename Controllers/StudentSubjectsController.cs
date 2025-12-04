@@ -24,7 +24,7 @@ namespace QLSV_V1.Controllers
         {
             _context = context;
         }
-
+        [Authorize(Roles = "Admin")]
         [HttpGet("class/status")]
         public async Task<IActionResult> GetClassApprovalStatus([FromQuery] bool? approved)
         {
@@ -59,10 +59,12 @@ namespace QLSV_V1.Controllers
         {
             return await GetClassApprovalStatus(true);
         }
-
+        [Authorize(Roles = "Admin")]
         [HttpPut("class/{classId}/approve")]
-        public async Task<IActionResult> ApproveClass(int classId, [FromQuery] string accId)
+        public async Task<IActionResult> ApproveClass(int classId)
         {
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
             if (string.IsNullOrWhiteSpace(accId))
                 return BadRequest("Thiếu accId.");
 
@@ -94,7 +96,6 @@ namespace QLSV_V1.Controllers
             // 5) Ngày duyệt = Ngày tạo lớp + 4 tháng
             if (classInfo.DateCreate == null)
                 return BadRequest("Lớp chưa có DateCreate.");
-
             DateOnly dateCreate = classInfo.DateCreate.Value;
             DateTime approveDate = dateCreate.ToDateTime(TimeOnly.MinValue).AddMonths(4);
 

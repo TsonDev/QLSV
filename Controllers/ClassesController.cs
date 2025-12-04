@@ -220,7 +220,7 @@ namespace QLSV_V1.Controllers
             var c = await _context.Classes.FindAsync(id);
             if (c == null) return NotFound();
 
-            c.Status = "Active";
+            c.Status = "Open";
             await _context.SaveChangesAsync();
 
             return NoContent();

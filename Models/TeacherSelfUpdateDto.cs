@@ -2,7 +2,7 @@
 {
     public class TeacherSelfUpdateDto
     {
-        public string AccId { get; set; }     // bắt buộc (user ID)
+          // bắt buộc (user ID)
         public string? Name { get; set; }
         public string? Email { get; set; }
         public int? PhoneNumber { get; set; }

@@ -100,7 +100,12 @@ namespace QLSV_V1.Controllers
             if (acc == null) return NotFound();
 
             if (!string.IsNullOrEmpty(dto.Username))
+            {
+                bool exists = await _context.Accounts.AnyAsync(a => a.Username == dto.Username && a.AccId != id);
+                if (exists) return BadRequest("Username đã tồn tại.");
                 acc.Username = dto.Username;
+            }
+
 
             if (!string.IsNullOrEmpty(dto.Role))
                 acc.Role = dto.Role;
@@ -196,13 +201,17 @@ namespace QLSV_V1.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto dto)
         {
+            //var acc = await _context.Accounts
+            //    .FirstOrDefaultAsync(a => a.Username == dto.Username);
+
+            //if (acc == null)
+            //    return BadRequest("Sai tài khoản.");
             var acc = await _context.Accounts
-                .FirstOrDefaultAsync(a => a.Username == dto.Username);
+                .FirstOrDefaultAsync(a => a.Username == dto.Username && a.Status == "Active");
 
-            if (acc == null)
-                return BadRequest("Sai tài khoản.");
+            if (acc == null) return BadRequest("Tài khoản bị khóa hoặc không tồn tại.");
 
-            
+
             if (!BCrypt.Net.BCrypt.Verify(dto.Password.Trim(), acc.Password.Trim()))
             {
                 // Nếu pass DB không phải bcrypt → fallback so sánh plain text
