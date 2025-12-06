@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
@@ -171,6 +172,97 @@ namespace QLSV_V1.Controllers
 
             return Ok(result);
         }
+        // ============================================================
+        // 8. GPA theo kỳ của từng sinh viên mà Advisor quản lý
+        // ============================================================
+        [HttpGet("advisor/gpa-by-semester/{semesterId}")]
+        [Authorize(Roles = "Advisor")]
+        public async Task<IActionResult> GetGpaOfAdvisorStudents(string semesterId)
+        {
+            // 1) Lấy accId từ JWT token
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (accId == null)
+                return Unauthorized("Token không chứa accId");
+
+            // 2) Tìm user
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.AccId.Trim() == accId.Trim());
+
+            if (user == null)
+                return Unauthorized("Không tìm thấy user");
+
+            // 3) Tìm advisor theo userId
+            var advisor = await _context.Advisors
+                .FirstOrDefaultAsync(a => a.UserId.Trim() == user.Id.Trim());
+
+            if (advisor == null)
+                return Unauthorized("Bạn không phải là cố vấn học tập");
+
+            // 4) Lấy sinh viên theo AdvisorId
+            var students = await _context.Students
+                .Where(s => s.AdvisorId.Trim() == advisor.AdvisorId.Trim())
+                .Select(s => s.StudentId)
+                .ToListAsync();
+
+            if (students.Count == 0)
+                return Ok(new { message = "Không có sinh viên nào thuộc advisor này" });
+
+            // 5) Lấy GPA theo kỳ của từng sinh viên
+            var result = await _context.Gpas
+                .Where(g => g.Semesterid.Trim() == semesterId.Trim()
+                         && students.Contains(g.Studentid.Trim()))
+                .Include(g => g.Student)
+                    .ThenInclude(s => s.User)
+                .GroupBy(g => new
+                {
+                    g.Student.StudentId,
+                    g.Student.User.Name
+                })
+                .Select(g => new
+                {
+                    StudentId = g.Key.StudentId.Trim(),
+                    Name = g.Key.Name,
+                    GPA = g.Average(x => x.Gpa1)
+                })
+                .OrderBy(x => x.Name)
+                .ToListAsync();
+
+            return Ok(new
+            {
+                semesterId,
+                totalStudents = result.Count,
+                data = result
+            });
+        }
+        // ============================================================
+        // 10. GPA trung bình tổng hợp của từng sinh viên (tất cả các kỳ)
+        // ============================================================
+        [HttpGet("gpa/student-average")]
+        [Authorize(Roles = "Admin,Teacher,Advisor")]
+        public async Task<IActionResult> GetAverageGpaOfStudents()
+        {
+            var result = await _context.Gpas
+                .Include(g => g.Student)
+                    .ThenInclude(s => s.User)
+                .GroupBy(g => new
+                {
+                    g.Student.StudentId,
+                    g.Student.User.Name
+                })
+                .Select(g => new
+                {
+                    StudentId = g.Key.StudentId.Trim(),
+                    Name = g.Key.Name,
+                    AvgGPA = g.Average(x => x.Gpa1),
+                    TotalSemesters = g.Count()
+                })
+                .OrderByDescending(x => x.AvgGPA)
+                .ToListAsync();
+
+            return Ok(result);
+        }
+
+
 
     }
 }

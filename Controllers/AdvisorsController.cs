@@ -27,7 +27,8 @@ namespace QLSV_V1.Controllers
             var data = await _context.Advisors
                 .Where(a => a.Status == "Active")
                 .Include(a => a.User)
-                .Select(a => new {
+                .Select(a => new
+                {
                     AdvisorId = a.AdvisorId.Trim(),
                     Name = a.User != null ? a.User.Name.Trim() : null,
                     Email = a.User != null ? a.User.Email.Trim() : null,
@@ -48,7 +49,8 @@ namespace QLSV_V1.Controllers
             var advisor = await _context.Advisors
                 .Where(a => a.AdvisorId.Trim() == id.Trim())
                 .Include(a => a.User)
-                .Select(a => new {
+                .Select(a => new
+                {
                     AdvisorId = a.AdvisorId.Trim(),
                     a.Status,
                     User = a.User == null ? null : new
@@ -247,13 +249,32 @@ namespace QLSV_V1.Controllers
         // 8) GET STUDENTS OF ADVISOR — ADVISOR
         // =====================================================================
         [Authorize(Roles = "Advisor")]
-        [HttpGet("{advisorId}/students")]
-        public async Task<IActionResult> GetStudentsOfAdvisor(string advisorId)
+        [HttpGet("students")]
+        public async Task<IActionResult> GetStudentsOfAdvisor()
         {
+            // 1) Lấy accId từ token
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (accId == null) return Unauthorized("Token không chứa accId");
+
+            // 2) Lấy user từ accId
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.AccId.Trim() == accId.Trim());
+
+            if (user == null) return Unauthorized("Không tìm thấy user");
+
+            // 3) Lấy advisor theo userId
+            var advisor = await _context.Advisors
+                .FirstOrDefaultAsync(a => a.UserId.Trim() == user.Id.Trim());
+
+            if (advisor == null)
+                return Unauthorized("Bạn không phải là cố vấn học tập");
+
+            // 4) Lấy danh sách sinh viên theo advisorId
             var students = await _context.Students
-                .Where(s => s.AdvisorId.Trim() == advisorId.Trim() && s.Status == "Active")
+                .Where(s => s.AdvisorId.Trim() == advisor.AdvisorId.Trim() && s.Status == "Active")
                 .Include(s => s.User)
-                .Select(s => new {
+                .Select(s => new
+                {
                     StudentId = s.StudentId.Trim(),
                     Name = s.User != null ? s.User.Name : null,
                     Email = s.User != null ? s.User.Email : null,
@@ -266,4 +287,5 @@ namespace QLSV_V1.Controllers
             return Ok(students);
         }
     }
-}
+
+    }
