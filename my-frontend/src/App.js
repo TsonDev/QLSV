@@ -1,100 +1,90 @@
-﻿import React from "react";
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from "react-router-dom";
-import Home from "./Pages/Home";
-import Subjects from "./Pages/Subjects";
-import ScoreInputPageWrapper from "./Pages/ScoreInputPageWrapper";
-import ApprovePage from "./Pages/ApprovePage";
+﻿import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import DashboardLayout from "./Layout/DashboardLayout";
 import Login from "./Pages/Login";
 
-function App() {
-    const token = localStorage.getItem("token");
+// Admin pages
+import HomeAdmin from "./Pages/admin/Home";
+import AccountsPage from "./Pages/admin/AccountsPage";
+import ApprovePage from "./Pages/admin/ApprovePage";
 
-    return (
-        <Router>
+import ProtectedRoute from "./Routes/ProtectedRoute";
+// Teacher pages
+import ClassPage from "./Pages/Teacher/ClassPage";
+import PointInputPage from "./Pages/Teacher/TeacherScoresPage";
 
-            {/* =============== MENU =============== */}
-            {token && (
-                <nav
-                    style={{
-                        backgroundColor: "#007bff",
-                        padding: "10px 0",
-                        marginBottom: "20px",
-                    }}
-                >
-                    <ul
-                        style={{
-                            listStyle: "none",
-                            display: "flex",
-                            justifyContent: "center",
-                            gap: "20px",
-                            margin: 0,
-                            padding: 0,
-                        }}
-                    >
-                        <li>
-                            <Link to="/home" style={{ color: "white" }}>Trang chủ</Link>
-                        </li>
-                        <li>
-                            <Link to="/subjects" style={{ color: "white" }}>Môn học</Link>
-                        </li>
-                        <li>
-                            <Link to="/teacher/class/11" style={{ color: "white" }}>Nhập điểm</Link>
-                        </li>
-                        <li>
-                            <Link to="/admin/approve" style={{ color: "white" }}>Duyệt điểm</Link>
-                        </li>
-                        <li>
-                            <button
-                                onClick={() => {
-                                    localStorage.removeItem("token");
-                                    window.location.href = "/login";
-                                }}
-                                style={{
-                                    background: "red",
-                                    color: "white",
-                                    border: "none",
-                                    padding: "5px 10px",
-                                    borderRadius: "5px"
-                                }}
-                            >
-                                Đăng xuất
-                            </button>
-                        </li>
-                    </ul>
-                </nav>
-            )}
+export default function App() {
+   return (
+      <BrowserRouter>
+         <Routes>
 
-            {/* =============== ROUTES =============== */}
-            <Routes>
-                {/* Trang login */}
-                <Route path="/login" element={<Login />} />
+            {/* Redirect "/" theo role */}
+            <Route 
+               path="/" 
+               element={
+                  localStorage.getItem("role") === "Admin" ? (
+                     <Navigate to="/admin/home" replace />
+                  ) : localStorage.getItem("role") === "Teacher" ? (
+                     <Navigate to="/teacher/home" replace />
+                  ) : localStorage.getItem("role") === "Advisor" ? (
+                     <Navigate to="/advisor/home" replace />
+                  ) : (
+                     <Navigate to="/login" replace />
+                  )
+               }
+            />
 
-                {/* Khi vào "/", chuyển qua login luôn */}
-                <Route path="/" element={<Navigate to="/login" />} />
+            {/* Public */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/not-authorized" element={<div>Không có quyền truy cập</div>} />
+            
 
-                {/* Sau khi login → vào trang home */}
-                <Route
-                    path="/home"
-                    element={token ? <Home /> : <Navigate to="/login" />}
-                />
+            {/* ADMIN */}
+            <Route
+               path="/admin"
+               element={
+                  <ProtectedRoute allowedRoles={["Admin"]}>
+                     <DashboardLayout />
+                  </ProtectedRoute>
+               }
+            >
+               <Route path="home" element={<HomeAdmin />} />
+               <Route path="accounts" element={<AccountsPage />} />
+               <Route path="teachers" element={<div>Quản lý giảng viên</div>} />
+               <Route path="advisor" element={<div>Quản lý cố vấn</div>} />
+               <Route path="classes" element={<ApprovePage />} />
+               <Route path="statistics" element={<div>Thống kê</div>} />
+            </Route>
 
-                <Route
-                    path="/subjects"
-                    element={token ? <Subjects /> : <Navigate to="/login" />}
-                />
+            {/* TEACHER */}
+            <Route
+               path="/teacher"
+               element={
+                  <ProtectedRoute allowedRoles={["Teacher"]}>
+                     <DashboardLayout />
+                  </ProtectedRoute>
+               }
+            >
+               <Route path="home" element={<div>Trang giáo viên</div>} />
+               <Route path="classes" element={<ClassPage />} />
+               <Route path="scores" element={<PointInputPage />} />
+               {/* <Route path="score/:classId" element={<PointInputPage />} /> */}
 
-                <Route
-                    path="/teacher/class/:id"
-                    element={token ? <ScoreInputPageWrapper /> : <Navigate to="/login" />}
-                />
+            </Route>
 
-                <Route
-                    path="/admin/approve"
-                    element={token ? <ApprovePage /> : <Navigate to="/login" />}
-                />
-            </Routes>
-        </Router>
-    );
+            {/* ADVISOR */}
+            <Route
+               path="/advisor"
+               element={
+                  <ProtectedRoute allowedRoles={["Advisor"]}>
+                     <DashboardLayout />
+                  </ProtectedRoute>
+               }
+            >
+               <Route path="home" element={<div>Trang cố vấn học tập</div>} />
+               <Route path="students" element={<div>Sinh viên cố vấn</div>} />
+            </Route>
+
+         </Routes>
+      </BrowserRouter>
+   );
 }
-
-export default App;

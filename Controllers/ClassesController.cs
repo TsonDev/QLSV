@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.CodeAnalysis.Elfie.Extensions;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -28,6 +29,7 @@ namespace QLSV_V1.Controllers
                 .Where(c => c.Status == "Open")
                 .Select(c => new
                 {
+                    Id = c.Id,
                     ClassId = c.ClassId.Trim(),
                     ClassName = c.ClassName.Trim(),
                     SubjectId = c.SubjectId.Trim(),

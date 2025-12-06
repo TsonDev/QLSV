@@ -33,4 +33,9 @@
     <None Include="D:\DoAnChuyenNganh\QLSV_V1\Controllers\.editorconfig" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="my-frontend\src\Pages\Advisor\" />
+    <Folder Include="my-frontend\src\Pages\Teacher\" />
+  </ItemGroup>
+
 </Project>

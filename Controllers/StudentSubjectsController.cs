@@ -35,14 +35,41 @@ namespace QLSV_V1.Controllers
                     c.ClassName,
                     SubjectId = c.SubjectId,
                     TotalRecords = _context.StudentSubjects.Count(ss => ss.ClassId == c.Id),
+
+                    // TRUE nếu tất cả điểm đều IsApproved = 1
                     IsApproved = !_context.StudentSubjects.Any(ss => ss.ClassId == c.Id && ss.IsApproved != 1),
-                    ApprovedAt = _context.StudentSubjects.Where(ss => ss.ClassId == c.Id).Max(ss => ss.ApprovedAt),
-                    ApprovedBy = _context.StudentSubjects.Where(ss => ss.ClassId == c.Id).Max(ss => ss.ApprovedBy)
+
+                    // Kiểm tra GV đã gửi chưa
+                    HasSubmitted = _context.StudentSubjects.Any(ss =>
+                        ss.ClassId == c.Id && ss.Status == "submitted"),
+
+                    ApprovedAt = _context.StudentSubjects
+                        .Where(ss => ss.ClassId == c.Id)
+                        .Max(ss => ss.ApprovedAt),
+
+                    ApprovedBy = _context.StudentSubjects
+                        .Where(ss => ss.ClassId == c.Id)
+                        .Max(ss => ss.ApprovedBy)
                 });
 
-            // Nếu FE truyền approved=true/false → lọc
+            // Lọc theo trạng thái gửi từ FE
             if (approved.HasValue)
-                query = query.Where(c => c.IsApproved == approved.Value);
+            {
+                if (approved.Value)
+                {
+                    // ===========================
+                    // Lọc: ĐÃ DUYỆT
+                    // ===========================
+                    query = query.Where(c => c.IsApproved);
+                }
+                else
+                {
+                    // ===========================
+                    // Lọc: CHƯA DUYỆT nhưng đã gửi
+                    // ===========================
+                    query = query.Where(c => !c.IsApproved && c.HasSubmitted);
+                }
+            }
 
             var data = await query.ToListAsync();
             return Ok(data);

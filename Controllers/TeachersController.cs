@@ -1,4 +1,5 @@
 ﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
@@ -301,12 +302,31 @@ namespace QLSV_V1.Controllers
         // ============================================================
         // 11) GET CURRENT TEACHING CLASSES
         // ============================================================
-        [HttpGet("{teacherId}/classes/current")]
-        public async Task<IActionResult> GetCurrentClasses(string teacherId)
+        [HttpGet("classes/current")]
+        [Authorize(Roles = "Teacher")]
+        public async Task<IActionResult> GetCurrentClasses()
         {
+            // 1) Lấy accId từ token
+            var accId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (accId == null) return Unauthorized("Token không chứa accId");
+
+            // 2) Lấy user theo accId
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.AccId.Trim() == accId.Trim());
+
+            if (user == null) return Unauthorized("Không tìm thấy user");
+
+            // 3) Lấy teacher theo userId
+            var teacher = await _context.Teachers
+                .FirstOrDefaultAsync(t => t.UserId.Trim() == user.Id.Trim());
+
+            if (teacher == null) return Unauthorized("Bạn không phải là giảng viên");
+
+            // 4) Lấy các lớp đang dạy
             var data = await _context.Classes
-                .Where(c => c.TeacherId.Trim() == teacherId.Trim() && c.Status == "Open")
+                .Where(c => c.TeacherId.Trim() == teacher.TeacherId.Trim() && c.Status == "Open")
                 .Select(c => new {
+                    Id = c.Id,
                     ClassId = c.ClassId.Trim(),
                     c.ClassName,
                     c.Room,
@@ -318,6 +338,7 @@ namespace QLSV_V1.Controllers
 
             return Ok(data);
         }
+
 
         // ============================================================
         // 12) GET TEACHING HISTORY (closed / finished)

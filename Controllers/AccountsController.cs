@@ -45,8 +45,7 @@ namespace QLSV_V1.Controllers
 
         // ============================
         // GET DETAIL
-        // ============================
-        [Authorize(Roles = "Admin")]
+        // ===========================
         [HttpGet("{id}")]
         public async Task<IActionResult> GetAccount(string id)
         {
@@ -120,18 +119,97 @@ namespace QLSV_V1.Controllers
         // ============================
         // RESET PASSWORD
         // ============================
-        [Authorize(Roles = "Admin")]
-        [HttpPut("reset-password/{id}")]
-        public async Task<IActionResult> ResetPassword(string id, [FromBody] AccountActionDto dto)
+        public class ResetPasswordRequest
         {
-            var acc = await _context.Accounts.FindAsync(id);
-            if (acc == null) return NotFound();
+            public string Username { get; set; }
+        }
 
-            acc.Password = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+        [HttpPost("request-reset")]
+        public async Task<IActionResult> RequestResetPassword([FromBody] ResetPasswordRequest req)
+        {
+            if (string.IsNullOrWhiteSpace(req.Username))
+                return BadRequest("Vui lòng nhập username.");
+
+            var acc = await _context.Accounts
+                .FirstOrDefaultAsync(a => a.Username.Trim() == req.Username.Trim());
+
+            if (acc == null)
+                return BadRequest("Tài khoản không tồn tại.");
+
+            // Tạo ticket reset
+            var ticket = new ResetTicket
+            {
+                AccId = acc.AccId,
+                Username = acc.Username,
+                Status = "Pending",
+                RequestedAt = DateTime.Now
+            };
+
+            _context.ResetTickets.Add(ticket);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Yêu cầu reset mật khẩu đã được gửi. Admin sẽ xử lý." });
+        }
+        [Authorize(Roles = "Admin")]
+        [HttpPut("reset-password/by-ticket/{ticketId}")]
+        public async Task<IActionResult> ResetPasswordByTicket(int ticketId)
+        {
+            var ticket = await _context.ResetTickets.FindAsync(ticketId);
+            if (ticket == null)
+                return NotFound("Không tìm thấy yêu cầu reset.");
+
+            if (ticket.Status != "Pending")
+                return BadRequest("Yêu cầu đã được xử lý.");
+
+            var acc = await _context.Accounts
+                .FirstOrDefaultAsync(a => a.AccId == ticket.AccId);
+
+            if (acc == null)
+                return BadRequest("Tài khoản không tồn tại.");
+
+            // Tạo mật khẩu mới
+            string newPass = "abc123"; // bạn có thể random hoặc gửi mail
+
+            acc.Password = BCrypt.Net.BCrypt.HashPassword(newPass);
+
+            // Cập nhật ticket
+            ticket.Status = "Approved";
+            ticket.ProcessedAt = DateTime.Now;
+            ticket.ProcessedBy = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             await _context.SaveChangesAsync();
-            return Ok("Đặt lại mật khẩu thành công!");
+
+            return Ok(new
+            {
+                message = "Đặt lại mật khẩu thành công!",
+                username = acc.Username,
+                newPassword = newPass
+            });
         }
+        [Authorize(Roles = "Admin")]
+        [HttpPut("reset-password/reject/{ticketId}")]
+        public async Task<IActionResult> RejectReset(int ticketId)
+        {
+            var ticket = await _context.ResetTickets.FindAsync(ticketId);
+            if (ticket == null)
+                return NotFound("Không tìm thấy yêu cầu reset.");
+
+            if (ticket.Status != "Pending")
+                return BadRequest("Yêu cầu đã được xử lý.");
+
+            ticket.Status = "Rejected";
+            ticket.ProcessedAt = DateTime.Now;
+            ticket.ProcessedBy = User.Identity.Name;
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Đã từ chối yêu cầu reset." });
+        }
+
+
+
+
+
 
         // ============================
         // UPDATE ROLE
@@ -199,6 +277,8 @@ namespace QLSV_V1.Controllers
         // LOGIN (KHÔNG CẦN JWT)
         // ============================
         [HttpPost("login")]
+        [AllowAnonymous]
+
         public async Task<IActionResult> Login(LoginDto dto)
         {
             //var acc = await _context.Accounts
@@ -241,7 +321,11 @@ namespace QLSV_V1.Controllers
 
             string jwt = new JwtSecurityTokenHandler().WriteToken(token);
 
-            return Ok(new { token = jwt });
+            return Ok(new
+            {
+                token = jwt,
+                role = acc.Role?.Trim()
+            });
         }
     }
 }

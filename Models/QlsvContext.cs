@@ -36,6 +36,8 @@ public partial class QlsvContext : DbContext
     public virtual DbSet<TeacherSubject> TeacherSubjects { get; set; }
 
     public virtual DbSet<User> Users { get; set; }
+    public DbSet<ResetTicket> ResetTickets { get; set; }
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

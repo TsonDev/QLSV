@@ -23,5 +23,5 @@ public partial class Student
 
     public virtual User? User { get; set; }
     public virtual Advisor? Advisor { get; set; }
-    public virtual Class? Class { get; set; }
+    //public virtual Class? Class { get; set; }
 }
