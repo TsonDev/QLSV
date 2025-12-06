@@ -85,7 +85,8 @@ export default function TeacherScoresPage() {
                     body: JSON.stringify({
                         point1: item.point1 ?? null,
                         point2: item.point2 ?? null,
-                        point3: item.point3 ?? null
+                        point3: item.point3 ?? null,
+
                     })
                 }
             );
@@ -191,6 +192,8 @@ export default function TeacherScoresPage() {
                             <th className="td">Điểm 1</th>
                             <th className="td">Điểm 2</th>
                             <th className="td">Điểm 3</th>
+                             <th className="td">Số tiết</th>
+                              <th className="td">Số tiết nghỉ</th>
                             <th className="td">Tổng</th>
                             <th className="td">Trạng thái</th>
                             <th className="td">Lưu</th>
@@ -234,6 +237,28 @@ export default function TeacherScoresPage() {
                                         value={item.point3 ?? ""}
                                         onChange={(e) =>
                                             updateLocal(item.studentId, "point3", e.target.value)
+                                        }
+                                        className="input-td"
+                                    />
+                                </td>
+                                <td className="td">
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={item.soTietNghi ?? ""}
+                                        onChange={(e) =>
+                                            updateLocal(item.studentId, "soTietNghi", e.target.value)
+                                        }
+                                        className="input-td"
+                                    />
+                                </td>
+                                <td className="td">
+                                    <input
+                                        type="number"
+                                        step="0.1"
+                                        value={item.soTiet ?? ""}
+                                        onChange={(e) =>
+                                            updateLocal(item.studentId, "soTiet", e.target.value)
                                         }
                                         className="input-td"
                                     />

@@ -245,6 +245,8 @@ namespace QLSV_V1.Controllers
             ss.Point1 = dto.Point1;
             ss.Point2 = dto.Point2;
             ss.Point3 = dto.Point3;
+            ss.SoTietNghi = dto.SoTietNghi;
+            ss.SoTiet = dto.SoTiet;
 
             ss.PointTotal =
                 (dto.Point1 ?? 0) * 0.3 +
@@ -262,7 +264,9 @@ namespace QLSV_V1.Controllers
                 ss.Point1,
                 ss.Point2,
                 ss.Point3,
-                ss.PointTotal
+                ss.PointTotal,
+                ss.SoTiet,
+                ss.SoTietNghi
             });
         }
 
@@ -472,6 +476,8 @@ namespace QLSV_V1.Controllers
                     ss.Point2,
                     ss.Point3,
                     ss.PointTotal,
+                    ss.SoTietNghi,
+                    ss.SoTiet,
                     ss.IsApproved,
                     ss.Status
                 }

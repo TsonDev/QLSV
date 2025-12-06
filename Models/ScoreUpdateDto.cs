@@ -5,6 +5,9 @@
             public double? Point1 { get; set; }
             public double? Point2 { get; set; }
             public double? Point3 { get; set; }
+        public int? SoTietNghi { get; set; }
+        public int? SoTiet { get; set; }
+
         
 
     }
