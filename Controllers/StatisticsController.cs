@@ -71,7 +71,7 @@ namespace QLSV_V1.Controllers
         // 4. DANH SÁCH SINH VIÊN CẢNH BÁO HỌC VỤ (GPA THẤP)
         // ============================================================
         [HttpGet("warning")]
-        [Authorize(Roles = "Admin,Teacher")]   // 👈 Sinh viên không được xem danh sách cảnh báo
+        [Authorize(Roles = "Admin,Teacher,Advisor")]   // 👈 Sinh viên không được xem danh sách cảnh báo
         public async Task<IActionResult> GetWarningStudents(double gpaThreshold = 2.0)
         {
             var data = await _context.Gpas

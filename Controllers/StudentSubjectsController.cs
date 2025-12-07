@@ -222,6 +222,9 @@ namespace QLSV_V1.Controllers
                 $"BangDiem_Lop_{classId}.xlsx"
             );
         }
+
+        [Authorize(Roles ="Teacher")]
+        [AllowAnonymous]
         [HttpPut("student-subject/{studentId}/{subjectId}/{semesterId}")]
         public async Task<IActionResult> UpdateScore(
      string studentId,
