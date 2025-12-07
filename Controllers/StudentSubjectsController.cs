@@ -246,7 +246,7 @@ namespace QLSV_V1.Controllers
             ss.Point2 = dto.Point2;
             ss.Point3 = dto.Point3;
             ss.SoTietNghi = dto.SoTietNghi;
-            ss.SoTiet = dto.SoTiet;
+      
             if (Sub.Type.Contains("TH"))
             {
                 ss.PointTotal =
