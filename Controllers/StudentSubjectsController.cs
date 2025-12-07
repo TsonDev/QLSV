@@ -240,18 +240,34 @@ namespace QLSV_V1.Controllers
 
             if (ss.IsApproved == 1)
                 return BadRequest("Điểm đã duyệt, giảng viên không thể sửa.");
-
+            var Sub = await _context.Subjects.FirstOrDefaultAsync(x => x.Id == ss.SubjectId);
             // Cập nhật điểm
             ss.Point1 = dto.Point1;
             ss.Point2 = dto.Point2;
             ss.Point3 = dto.Point3;
             ss.SoTietNghi = dto.SoTietNghi;
             ss.SoTiet = dto.SoTiet;
-
-            ss.PointTotal =
-                (dto.Point1 ?? 0) * 0.3 +
-                (dto.Point2 ?? 0) * 0.3 +
-                (dto.Point3 ?? 0) * 0.4;
+            if (Sub.Type.Contains("TH"))
+            {
+                ss.PointTotal =
+               (dto.Point1 ?? 0) * 0.25 +
+               (dto.Point2 ?? 0) * 0.25 +
+               (dto.Point3 ?? 0) * 0.5;
+            }
+            if (Sub.Type.Contains("LT"))
+            {
+                ss.PointTotal =
+               (dto.Point1 ?? 0) * 0.2 +
+               (dto.Point2 ?? 0) * 0.3 +
+               (dto.Point3 ?? 0) * 0.5;
+            }
+            if (Sub.Type.Contains("BTL"))
+            {
+                ss.PointTotal =
+              
+               (dto.Point3 ?? 0) * 1;
+            }
+          
 
             await _context.SaveChangesAsync();
 
