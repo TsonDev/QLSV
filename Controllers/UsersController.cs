@@ -1,10 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.DotNet.Scaffolding.Shared.Messaging;
 using Microsoft.EntityFrameworkCore;
 using QLSV_V1.Models;
 
@@ -21,156 +20,178 @@ namespace QLSV_V1.Controllers
             _context = context;
         }
 
-        // GET: api/Users
+        // LẤY DANH SÁCH USER
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        public async Task<ActionResult<IEnumerable<object>>> GetUsers()
         {
             return await _context.Users
-                .Where(u=>u.Status=="Active").ToListAsync();
+                .Where(u => u.Status == "Active")
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Name,
+                    u.Email,
+                    u.Gender,
+                    u.Birthday,
+                    u.PhoneNumber,
+                    u.AccId
+                })
+                .ToListAsync();
         }
 
-        // GET: api/Users/5
+        // LẤY USER THEO ID
         [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(string id)
+        public async Task<ActionResult<object>> GetUser(string id)
         {
-            var user = await _context.Users.FindAsync(id);
+            var user = await _context.Users
+                .Include(u => u.Add)
+                .FirstOrDefaultAsync(u => u.Id == id);
 
-            if (user == null)
+            if (user == null) return NotFound();
+            if (user.Status == "Inactive") return BadRequest("User is deleted.");
+
+            return Ok(new
             {
-                return NotFound();
-            }
-            if (user.Status == "Inactive")
-                return BadRequest("User is deleted.");
-
-            return user;
+                user.Id,
+                user.Name,
+                user.Email,
+                user.Gender,
+                user.Birthday,
+                user.PhoneNumber,
+                Address = user.Add == null ? null : new
+                {
+                    user.Add.Province,
+                    user.Add.District,
+                    user.Add.Infor
+                }
+            });
         }
+
+        // UPDATE USER BẰNG ID
         [HttpPut("{id}")]
         public async Task<IActionResult> PutUser(string id, UserUpdateDto dto)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-                return NotFound();
+            var user = await _context.Users.Include(u => u.Add).FirstOrDefaultAsync(u => u.Id == id);
+            if (user == null) return NotFound();
+            if (user.Status == "Inactive") return BadRequest("User is deleted.");
 
-            if (user.Status == "Inactive")
-                return BadRequest("User is deleted.");
-
-            if (!string.IsNullOrWhiteSpace(dto.Name))
-                user.Name = dto.Name;
-
-            if (!string.IsNullOrWhiteSpace(dto.Email))
-                user.Email = dto.Email;
-
-            if (dto.Birthday != null)
-                user.Birthday = dto.Birthday;
-
-            if (!string.IsNullOrWhiteSpace(dto.Gender))
-                user.Gender = dto.Gender;
-
-            if (dto.PhoneNumber != null)
-                user.PhoneNumber = dto.PhoneNumber;
-
-            // UPDATE Address
-            if (dto.Address != null)
-            {
-                var address = await _context.Addresses.FindAsync(user.AddId);
-                if (address != null)
-                {
-                    if (!string.IsNullOrWhiteSpace(dto.Address.Province))
-                        address.Province = dto.Address.Province;
-
-                    if (!string.IsNullOrWhiteSpace(dto.Address.District))
-                        address.District = dto.Address.District;
-
-                    if (!string.IsNullOrWhiteSpace(dto.Address.Infor))
-                        address.Infor = dto.Address.Infor;
-                }
-            }
+            UpdateUserData(user, dto);
 
             await _context.SaveChangesAsync();
             return NoContent();
         }
-        //[HttpGet("user-detail/{accountId}")]
-        //public async Task<IActionResult> GetUserDetailByAccountId(string accountId)
-        //{
-        //    var acc = await _context.Accounts
-        //        .Where(a => a.AccId.Trim() == accountId.Trim())
-        //        .Include(a => a.Users)
-        //            .ThenInclude(u => u.Students)   // thông tin sinh viên
-        //        .Include(a => a.Users)
-        //            .ThenInclude(u => u.Teacher)   // thông tin giảng viên
-        //        .FirstOrDefaultAsync();
 
-        //    if (acc == null)
-        //        return NotFound("Account không tồn tại.");
+        // ==========================  LOGIN USER ONLY  ==========================
 
-        //    return Ok(new
-        //    {
-        //        AccountId = acc.AccId.Trim(),
-        //        Username = acc.Username.Trim(),
-        //        Email = acc.ema.Trim(),
-        //        Role = acc.Role.Trim(),
-        //        Status = acc.Status.Trim(),
+        // GET: api/users/me
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyUserInfo()
+        {
+            var accId = GetAccIdFromToken();
+            if (accId == null) return Unauthorized();
 
-        //        User = new
-        //        {
-        //            UserId = acc.User.UserId.Trim(),
-        //            Name = acc.User.Name.Trim(),
-        //            Phone = acc.User.Phone?.Trim(),
-        //            Gender = acc.User.Gender?.Trim(),
-        //            Address = acc.User.Address?.Trim(),
-        //            Birthday = acc.User.Birthday,
+            var user = await _context.Users
+                .Include(u => u.Add)
+                .Where(u => u.AccId == accId)
+                .Select(u => new
+                {
+                    u.Id,
+                    u.Name,
+                    u.Email,
+                    u.Gender,
+                    u.Birthday,
+                    u.PhoneNumber,
+                    Address = u.Add == null ? null : new
+                    {
+                        u.Add.Province,
+                        u.Add.District,
+                        u.Add.Infor
+                    }
+                })
+                .FirstOrDefaultAsync();
 
-        //            Student = acc.User.Student == null ? null : new
-        //            {
-        //                StudentId = acc.User.Student.StudentId.Trim(),
-        //                MajorId = acc.User.Student.MajorId.Trim(),
-        //                Course = acc.User.Student.Course
-        //            },
+            if (user == null) return NotFound("Không tìm thấy user.");
 
-        //            Teacher = acc.User.Teacher == null ? null : new
-        //            {
-        //                TeacherId = acc.User.Teacher.TeacherId.Trim(),
-        //                Department = acc.User.Teacher.Department?.Trim()
-        //            }
-        //        }
-        //    });
-        //}
+            return Ok(user);
+        }
 
+        // PUT: api/users/me → cập nhật user theo token
+        [HttpPut("me")]
+        public async Task<IActionResult> UpdateMyUser(UserUpdateDto dto)
+        {
+            var accId = GetAccIdFromToken();
+            if (accId == null) return Unauthorized();
+
+            var user = await _context.Users
+                .Include(u => u.Add)
+                .FirstOrDefaultAsync(u => u.AccId == accId);
+
+            if (user == null) return NotFound();
+
+            UpdateUserData(user, dto);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Cập nhật thành công!" });
+        }
+
+        private static void UpdateUserData(User user, UserUpdateDto dto)
+        {
+            if (!string.IsNullOrEmpty(dto.Name))
+                user.Name = dto.Name;
+
+            if (!string.IsNullOrEmpty(dto.Email))
+                user.Email = dto.Email;
+
+            if (!string.IsNullOrEmpty(dto.Gender))
+                user.Gender = dto.Gender;
+
+            if (dto.Birthday != null)
+                user.Birthday = dto.Birthday;
+
+            if ((dto.PhoneNumber.HasValue))
+                user.PhoneNumber = dto.PhoneNumber;
+
+            // Update Address
+            if (dto.Address != null && user.Add != null)
+            {
+                if (!string.IsNullOrEmpty(dto.Address.Province))
+                    user.Add.Province = dto.Address.Province;
+
+                if (!string.IsNullOrEmpty(dto.Address.District))
+                    user.Add.District = dto.Address.District;
+
+                if (!string.IsNullOrEmpty(dto.Address.Infor))
+                    user.Add.Infor = dto.Address.Infor;
+            }
+        }
         [HttpPost]
         public async Task<ActionResult<User>> PostUser(UserCreateDto dto)
         {
-            // Kiểm tra account tồn tại
+            // 1. Kiểm tra account tồn tại
             var accExists = await _context.Accounts.AnyAsync(a => a.AccId == dto.AccId);
             if (!accExists)
                 return BadRequest($"Không tồn tại account id {dto.AccId}");
 
-            // Tự sinh AddId
+            // 2. Generate UserId random không trùng
+            string newUserId;
+            do
+            {
+                string randomPart = Guid.NewGuid().ToString("N").Substring(0, 5);
+                newUserId = $"usr-{randomPart}";
+            }
+            while (await _context.Users.AnyAsync(u => u.Id == newUserId));
+
+            // 3. Tạo Address
             var newAddress = new Address
             {
-                AddId = "Add-" + Guid.NewGuid().ToString("N")[..6],
+                AddId = "Add-" + Guid.NewGuid().ToString("N").Substring(0, 6),
                 Province = dto.Address.Province,
                 District = dto.Address.District,
                 Infor = dto.Address.Infor
             };
-
             _context.Addresses.Add(newAddress);
 
-            // Tự sinh UserId
-            var lastUser = await _context.Users
-                .Where(u => u.Id.StartsWith("usr-"))
-                .OrderByDescending(u => u.Id)
-                .FirstOrDefaultAsync();
-
-            int nextNumber = 1;
-
-            if (lastUser != null)
-            {
-                string numberPart = lastUser.Id.Substring(4);
-                nextNumber = int.Parse(numberPart) + 1;
-            }
-
-            string newUserId = $"usr-{nextNumber:D5}";
-
+            // 4. Tạo User
             var user = new User
             {
                 Id = newUserId,
@@ -185,10 +206,10 @@ namespace QLSV_V1.Controllers
             };
 
             _context.Users.Add(user);
-
             await _context.SaveChangesAsync();
 
-            var result = new
+            // 5. Trả về
+            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, new
             {
                 user.Id,
                 user.Name,
@@ -203,43 +224,13 @@ namespace QLSV_V1.Controllers
                     newAddress.District,
                     newAddress.Infor
                 }
-            };
-
-            return CreatedAtAction(nameof(GetUser), new { id = user.Id }, result);
+            });
         }
 
 
-        // DELETE: api/Users/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteUser(string id)
+        private string GetAccIdFromToken()
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound();
-            }
-
-            user.Status = "Inactive";
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            return User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         }
-
-        private bool UserExists(string id)
-        {
-            return _context.Users.Any(e => e.Id == id);
-        }
-        [HttpPut("restore/{id}")]
-        public async Task<IActionResult> RestoreUser(string id)
-        {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null) return NotFound();
-
-            user.Status = "Active";
-            await _context.SaveChangesAsync();
-
-            return NoContent();
-        }
-
     }
 }

@@ -69,7 +69,9 @@ namespace QLSV_V1.Controllers
             if (await _context.Accounts.AnyAsync(a => a.Username == dto.Username))
                 return BadRequest("Username đã tồn tại.");
 
-            string newId = $"acc-{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+            //string newId = $"acc-{Guid.NewGuid().ToString("N").Substring(0, 8)}";
+            string newId = $"acc-{new Random().Next(0, 10000):D4}";
+
 
             var acc = new Account
             {
